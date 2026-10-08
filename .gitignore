@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+out/
+cache/
+*.csv
+*.jsonl
+*.jsonl.gz
+!tests/fixtures/**
+*.part
+
+# Submitted smoke-test evidence is versioned on purpose
+!submission/
+!submission/*.json
+!submission/*.jsonl
+
+# Private working notes and the email draft stay local (never published)
+CLAUDE.md
+PROJECT_GUIDE.md
+SUBMISSION_EMAIL.md

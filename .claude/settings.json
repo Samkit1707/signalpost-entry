@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv sync)",
+      "Bash(uv --version)",
+      "Bash(uv run --with pytest pytest -q)",
+      "Bash(uv run python scripts/run_refresh_replay.py:*)",
+      "Bash(uv run python select_entry_batch.py:*)",
+      "Bash(uv run python scripts/run_competition_batch.py:*)",
+      "Bash(uv run python scripts/build_prototype.py:*)",
+      "Bash(curl -L 'https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv' -o brreg-enheter.csv)",
+      "Bash(curl -L 'https://builderr.ai/signalpost-company-universe-2025.jsonl.gz' -o signalpost-universe.jsonl.gz)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git rev-parse HEAD)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(rm -rf:*)"
+    ]
+  }
+}

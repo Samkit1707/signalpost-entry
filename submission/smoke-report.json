@@ -1,0 +1,86 @@
+{
+  "run_id": "smoke-final",
+  "started_at": "2026-10-09T13:01:25.300341Z",
+  "completed_at": "2026-10-09T13:03:16.722018Z",
+  "expected_count": 100,
+  "emitted_envelopes": 100,
+  "resumed_profiles": 0,
+  "profiles_fetched_this_run": 100,
+  "modules": [
+    "registry",
+    "accounting_obligation",
+    "registry_live",
+    "financials",
+    "roles",
+    "group",
+    "locations",
+    "wikidata_footprint",
+    "website",
+    "workforce",
+    "external_profiles",
+    "company_activity",
+    "company_jobs"
+  ],
+  "registry": {
+    "registry_snapshot_sha256": "5daebdf852b4a84db2ae2888f44147fc94d43230ab4cd6999bbe9c20e175af18",
+    "registry_rows_scanned": 1172821,
+    "requested": 100,
+    "selected": 100,
+    "absent_from_snapshot": []
+  },
+  "registry_download": {
+    "source": "cache",
+    "path": "cache/brreg-enheter.csv.gz",
+    "requests": 0,
+    "url": "https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv"
+  },
+  "operations": {
+    "requests": 619,
+    "bytes": 10486890,
+    "p50_ms": 239,
+    "p95_ms": 1938,
+    "requests_per_company": 6.19,
+    "projected_requests_for_1000": 6190,
+    "runtime_ms": 112497
+  },
+  "budget": {
+    "max_requests": null,
+    "deadline_minutes": 40.0,
+    "stopped_early": false
+  },
+  "wikidata": {
+    "enabled": true,
+    "status": "ok",
+    "indexed_organisations": 1,
+    "requests": 0,
+    "cached": true,
+    "retrieved_at": "2026-10-08T20:30:37.285968Z",
+    "content_sha256": "e4fb8cf085da969b99a4309d7cf12fae7dbfad221e699e7498bb7f72b31edd52"
+  },
+  "coverage": {
+    "registry": 100,
+    "accounting_obligation": 100,
+    "registry_live": 100,
+    "financials": 100,
+    "roles": 100,
+    "group": 8,
+    "locations": 100,
+    "wikidata_footprint": 1,
+    "website": 9,
+    "workforce": 10,
+    "external_profiles": 1,
+    "company_activity": 2,
+    "company_jobs": 0
+  },
+  "validation": {
+    "passed": true,
+    "checks": {
+      "exact_expected_count": true,
+      "unique_organisation_numbers": true,
+      "all_entity_states_terminal": true,
+      "all_module_states_terminal": true,
+      "zero_silent_drops": true
+    },
+    "invalid_states": []
+  }
+}
