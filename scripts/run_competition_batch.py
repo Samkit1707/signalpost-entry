@@ -41,15 +41,17 @@ from norway_company_agent.enrichment import (  # noqa: E402
 )
 from norway_company_agent.evidence import evidence  # noqa: E402
 from norway_company_agent.domain_guess import guess_website  # noqa: E402
+from norway_company_agent.news import MAX_REQUESTS as NEWS_MAX_REQUESTS, fetch_dated_news  # noqa: E402
+from norway_company_agent.site import build_site  # noqa: E402
 
 DEFAULT_MODULES = ",".join([
     "registry", "accounting_obligation", "registry_live", "financials", "roles", "group", "locations",
-    "wikidata_footprint", "website", *ENRICHMENT_MODULES,
+    "wikidata_footprint", "website", *ENRICHMENT_MODULES, "dated_news",
 ])
 # Share of --deadline-minutes the bulk download may use; past it the run continues on live registry data.
 BULK_DOWNLOAD_SHARE = 0.3
 LIVE_IDENTITY_FIELDS = ("name", "legal_form", "employees", "bankrupt", "liquidating", "website", "latest_submitted_accounts")
-LOCAL_MODULES = {"registry", "accounting_obligation", "website", "wikidata_footprint", *ENRICHMENT_MODULES}
+LOCAL_MODULES = {"registry", "accounting_obligation", "website", "wikidata_footprint", "dated_news", *ENRICHMENT_MODULES}
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -83,6 +85,8 @@ def main() -> None:
     parser.add_argument("--no-domain-guess", action="store_true", help="Disable name-derived .no domain candidates")
     parser.add_argument("--max-requests", type=int, default=0, help="Global outbound request budget (0 = unlimited)")
     parser.add_argument("--deadline-minutes", type=float, default=0.0, help="Stop new network work after this many minutes (0 = none)")
+    parser.add_argument("--site-dir", default="out/site",
+                        help="Static site written from this run's envelopes (index, compare view, one page per company); '' disables")
     args = parser.parse_args()
     clock_start = PROCESS_START
 
@@ -129,7 +133,8 @@ def main() -> None:
 
     budget_lock = threading.Lock()
     budget = {"used": operations["requests"], "stopped": False}
-    PER_COMPANY_RESERVE = 16  # worst case: 5 official + homepage/robots + 4 pages + 2 guessed domains
+    # worst case: 5 official + homepage/robots + 4 pages + 2 guessed domains + dated-news feed/sitemap/articles
+    PER_COMPANY_RESERVE = 16 + NEWS_MAX_REQUESTS
 
     def reserve() -> bool:
         with budget_lock:
@@ -162,7 +167,7 @@ def main() -> None:
             profile["evidence"]["wikidata_footprint"] = wiki
         if not reserve():
             note = "budget_exhausted: run request/time budget reached before this company was fetched"
-            for module in [*fetch_modules, *(["website"] if "website" in requested_modules else [])]:
+            for module in [*fetch_modules, *[name for name in ("website", "dated_news") if name in requested_modules]]:
                 profile["evidence"][module] = evidence(module, "not_fetched", "budget_guard", "about:budget", note=note)
             metrics, website_metrics = [], {"requests": 0, "bytes": 0, "latencies_ms": []}
         else:
@@ -197,6 +202,12 @@ def main() -> None:
                         profile["website_discovery"] = {"method": "name_derived_domain_with_org_number_proof", "candidates": trail}
                     if accepted:
                         profile["evidence"]["website"] = accepted
+            if "dated_news" in requested_modules:
+                news_record, news_metrics = fetch_dated_news(profile)
+                profile["evidence"]["dated_news"] = news_record
+                for key in ("requests", "bytes"):
+                    website_metrics[key] += news_metrics[key]
+                website_metrics["latencies_ms"] = website_metrics["latencies_ms"] + news_metrics["latencies_ms"]
             settle(len(metrics) + website_metrics["requests"])
         builders = {
             "workforce": lambda: workforce_record(profile),
@@ -277,6 +288,15 @@ def main() -> None:
         },
         "validation": validation,
     }
+    if args.site_dir:
+        # The saved site is built from exactly these envelopes; a site failure is reported, never drops envelopes.
+        try:
+            report["site"] = {"status": "ok", "path": str(Path(args.site_dir) / "index.html"),
+                              **build_site(envelopes, args.site_dir, {"run_id": args.run_id, "completed_at": completed_at})}
+        except Exception as exc:  # noqa: BLE001
+            report["site"] = {"status": "error", "error": f"{type(exc).__name__}: {str(exc)[:300]}"}
+    report["synthesis"] = {"envelopes_with_summary": sum(1 for item in envelopes if item["synthesis"]["sentences"]),
+                           "sentences": sum(len(item["synthesis"]["sentences"]) for item in envelopes)}
     Path(args.report).parent.mkdir(parents=True, exist_ok=True)
     Path(args.report).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2))

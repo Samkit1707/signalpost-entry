@@ -75,7 +75,7 @@ uv run python scripts/run_competition_batch.py \
 uv run --with pytest pytest -q
 ```
 
-The original starter archive was clean-room verified by Builderr on August 24, 2026 (104 tests). This entry has **153 tests and 5 subtests passing offline**, and has been run live on a 100-company smoke batch (`submission/smoke-report.json`) and a 998-company rehearsal.
+The original starter archive was clean-room verified by Builderr on August 24, 2026 (104 tests). This entry has **166 tests and 5 subtests passing offline**, and has been run live on a 100-company smoke batch (`submission/smoke-report.json`) and a 998-company rehearsal.
 
 Increase `--count` and `--expected-count` together for a larger local test. The 100-row smoke test above is practice only; Builderr supplies the companies for every official run.
 
@@ -175,5 +175,39 @@ are never crawled on a guessed domain, and are labelled deleted in the viewer.
 
 Optional: `--bulk PATH` (use a supplied snapshot), `--bulk-cache PATH`, `--max-requests N` (global budget),
 `--no-domain-guess`, `--wikidata-cache PATH`.
-No API keys, no paid services, third-party cost $0. Offline viewer:
-`uv run python scripts/build_prototype.py --input out/profiles.jsonl --output out/index.html`.
+No API keys, no paid services, third-party cost $0.
+
+### v2 of this entry: saved site, sourced synthesis, dated news
+
+The same official command now also writes a **static site** from the run's envelopes into `--site-dir`
+(default `out/site/`; `--site-dir ''` disables it). Open `out/site/index.html`; it works from disk, offline.
+
+| Page | What it does |
+|---|---|
+| `index.html` | search by name or organisation number (spaces and diacritics ignored), status / verified-website / dated-news filters, pick 2–3 companies to compare |
+| `compare.html?orgs=a,b,c` | companies side by side; each cell shows the value, a source link, the date it refers to and the retrieval date |
+| `companies/<org>.html` | sourced summary, fact table (value · source ↗ · as-of · retrieved · evidence id), every filed year of accounts, dated news, roles, full evidence list |
+
+Pages are responsive (fact tables and the compare grid stack on phones). Missing values read "Not found in checked
+sources" (or blocked / not checked), never 0. Built and tested on 300 and 1,000 profiles (`tests/test_v2_product.py`).
+Rebuild from saved envelopes: `uv run python scripts/build_site.py --envelopes out/envelopes.jsonl --report out/run-report.json --output out/site`.
+
+**Synthesis** (`synthesis.py`): every envelope has a `synthesis` with short sentences on what the company is and
+does, its latest financials, what changed and what is unknown; every sentence lists the evidence ids it rests on.
+"Latest" accounts are the newest filed fiscal year (FY2025 when filed; company accounts before group accounts in
+the same year). A change is stated only when two filed years of the same account type both report the figure;
+a missing figure is "not reported", never 0. The company page shows the same sentences with links to the evidence.
+
+**Dated news** (`news.py`, module `dated_news`): only for websites that passed the identity gate. Reads the RSS/Atom
+feed the homepage declares, dated listings on the news page the crawl already fetched (`<time datetime>` tied to
+exactly one same-site link), then `sitemap.xml` (Google News entries, or the newest news-like URLs read for the
+title and the publication date the article declares). Every item has a title, direct URL, publication date and the
+verified site it came from, and is emitted as a `dated_news` claim. Items on another registered domain, future
+dates, modification-only dates and undated items are dropped. At most 4 extra requests per verified site, robots.txt
+honoured, 2 concurrent requests per host.
+
+Identity and precision rules (website gate, guessed domains, social links, Wikidata) are unchanged from v1.
+
+The starter's `scripts/build_prototype.py` viewer is kept for reference. The new site reuses its evidence-inspection
+pattern (source, class, retrieval time, SHA-256), its palette and its diacritic-insensitive search. Unlike that viewer,
+the official run writes the site, and "latest" accounts are the newest filed year rather than the first record returned.

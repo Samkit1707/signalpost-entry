@@ -18,6 +18,7 @@ import tldextract
 import trafilatura
 
 from .evidence import evidence
+from .news import feed_links, news_listing_items
 from .politeness import host_slot
 
 USER_AGENT = "builderr-signalpost-poc/0.1 (+https://builderr.ai)"
@@ -351,6 +352,8 @@ def _fetch_secondary_page(url: str, *, homepage_domain: str, timeout: float, max
             "declared_dates": page_dates(page_soup, page_structured),
             "job_postings": job_postings(page_structured),
         }
+        if page["category"] == "news":
+            page["news_items"] = news_listing_items(final_url, page_soup)
         return page, _social_links(final_url, page_soup), 2, len(raw), elapsed, None
     except Exception as exc:
         return None, [], page_request_count, 0, int((time.monotonic() - started) * 1000), f"{type(exc).__name__}: {str(exc)[:120]}"
@@ -425,6 +428,8 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
             "declared_dates": page_dates(soup, structured),
             "job_postings": job_postings(structured),
             "identity_text_excerpt": identity_excerpt(soup),
+            "feed_links": feed_links(final_url, soup),
+            "news_items": news_listing_items(final_url, soup, articles_only=True),
         }
         pages = [{"url": final_url, "title": title[:500], "main_text_excerpt": text[:5000], "content_sha256": value["content_sha256"]}]
         social = value["social_links"]

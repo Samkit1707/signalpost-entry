@@ -7,3 +7,9 @@
 - `company_activity` uses dates the page itself declares; undated news pages are listed without a date.
 - Registry employee counts are as reported to the register, not live headcount.
 - Sentiment and reviews are not produced (no rights-cleared source).
+- `dated_news` reads only the identity-verified site (≤4 requests): a declared RSS/Atom feed, dated listings on the
+  news page already crawled, then sitemap.xml. Sites without a feed, dated listing or sitemap get `not_available`.
+  Atom entries with only `<updated>` and sitemap `<lastmod>` are not treated as publication dates.
+- The synthesis is template-based from the envelope's own claims. It states no trend without two filed years of the
+  same account type that both report the figure, and it does not interpret beyond the sources.
+- The compare view needs JavaScript; company pages and the index list are plain HTML.

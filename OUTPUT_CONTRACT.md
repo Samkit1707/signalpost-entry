@@ -41,3 +41,17 @@ Emit one JSON object per input organisation number.
 ```
 
 Allowed availability states are `available`, `not_available`, `blocked`, `not_applicable`, `ambiguous` and `failed`. A checked source that has zero jobs or zero locations is different from a source that was not checked.
+
+## Entry additions (v2 of this entry)
+
+Each envelope also carries:
+
+- `claims[].as_of`: the date the fact refers to when the source states one (fiscal-year end for accounts,
+  registration date for employees, publication date for news), otherwise `null`. `evidence[].retrieved_at` is the
+  retrieval time.
+- `dated_news` claims, one per item: `{"title", "url", "published_at", "source_kind"}` with its own evidence entry
+  (`source_url` = the feed, sitemap or page read; `item_url`; `published_at`; `company_match` = the identity-verified
+  site it was published on). With no item, one `dated_news` claim with `value: null`.
+- `synthesis`: `{"method", "sentences": [{"topic", "text", "evidence_ids"}], "narrative", "latest_fiscal_year"}`.
+  Topics are `what_it_does`, `financials`, `changes`, `unknown`. Every sentence cites evidence ids present in
+  `evidence[]`; `narrative` is the sentences joined with their ids in brackets.

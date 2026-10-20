@@ -1,0 +1,110 @@
+Downloading Brønnøysund bulk registry (attempt 1/3) -> cache/brreg-enheter.csv.gz
+Downloading Brønnøysund bulk registry (attempt 2/3) -> cache/brreg-enheter.csv.gz
+{
+  "run_id": "smoke-v2-2026-10-20",
+  "started_at": "2026-10-20T10:06:54.791349Z",
+  "completed_at": "2026-10-20T10:18:46.828056Z",
+  "expected_count": 100,
+  "emitted_envelopes": 100,
+  "resumed_profiles": 0,
+  "profiles_fetched_this_run": 100,
+  "modules": [
+    "registry",
+    "accounting_obligation",
+    "registry_live",
+    "financials",
+    "roles",
+    "group",
+    "locations",
+    "wikidata_footprint",
+    "website",
+    "workforce",
+    "external_profiles",
+    "company_activity",
+    "company_jobs",
+    "dated_news"
+  ],
+  "registry": {
+    "registry_snapshot_sha256": "6f664c1a042cede28001c52659f25e02d9ceb8a3a4b54b20b527300824c26d74",
+    "registry_rows_scanned": 1174285,
+    "requested": 100,
+    "selected": 100,
+    "absent_from_snapshot": []
+  },
+  "registry_download": {
+    "source": "downloaded",
+    "path": "cache/brreg-enheter.csv.gz",
+    "url": "https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv",
+    "requests": 2,
+    "bytes": 155098913,
+    "elapsed_ms": 499170,
+    "retrieved_at": "2026-10-20T10:15:13Z"
+  },
+  "operations": {
+    "requests": 634,
+    "bytes": 167460959,
+    "p50_ms": 277,
+    "p95_ms": 1542,
+    "requests_per_company": 6.34,
+    "projected_requests_for_1000": 6340,
+    "runtime_ms": 713546
+  },
+  "budget": {
+    "max_requests": null,
+    "deadline_minutes": 40.0,
+    "stopped_early": false
+  },
+  "wikidata": {
+    "enabled": true,
+    "status": "ok",
+    "indexed_organisations": 1,
+    "requests": 1,
+    "cached": false,
+    "retrieved_at": "2026-10-20T10:15:50.738746Z",
+    "content_sha256": "e4fb8cf085da969b99a4309d7cf12fae7dbfad221e699e7498bb7f72b31edd52"
+  },
+  "coverage": {
+    "registry": 100,
+    "accounting_obligation": 100,
+    "registry_live": 100,
+    "financials": 100,
+    "roles": 100,
+    "group": 8,
+    "locations": 100,
+    "wikidata_footprint": 1,
+    "website": 10,
+    "workforce": 10,
+    "external_profiles": 2,
+    "company_activity": 3,
+    "company_jobs": 0,
+    "dated_news": 4
+  },
+  "validation": {
+    "passed": true,
+    "checks": {
+      "exact_expected_count": true,
+      "unique_organisation_numbers": true,
+      "all_entity_states_terminal": true,
+      "all_module_states_terminal": true,
+      "zero_silent_drops": true
+    },
+    "invalid_states": []
+  },
+  "site": {
+    "status": "ok",
+    "path": "out/site/index.html",
+    "run_id": "smoke-v2-2026-10-20",
+    "completed_at": "2026-10-20T10:18:46.828056Z",
+    "companies": 100,
+    "company_pages": 100,
+    "with_summary": 100,
+    "with_verified_website": 6,
+    "with_dated_news": 4,
+    "entry": "index.html",
+    "compare": "compare.html"
+  },
+  "synthesis": {
+    "envelopes_with_summary": 100,
+    "sentences": 627
+  }
+}

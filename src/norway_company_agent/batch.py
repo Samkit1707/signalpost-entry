@@ -9,6 +9,7 @@ from .contract import contract_fields
 from .evidence import evidence, utc_now
 from .official import accounting_obligation_assessment
 from .sampling import iter_bulk
+from .synthesis import build_synthesis
 
 
 TERMINAL_STATES = {
@@ -164,6 +165,7 @@ def terminal_envelope(
             "retry_count": int((record or {}).get("retry_count") or 0),
             "final_timestamp": (record or {}).get("retrieved_at") or completed_at,
         }
+    contract = contract_fields(profile, module_states)
     entity_state = "submission_error" if any(item["state"] == "submission_error" for item in module_states.values()) else "complete"
     return {
         "run_id": run_id,
@@ -173,7 +175,8 @@ def terminal_envelope(
         "completed_at": completed_at,
         "modules": module_states,
         "profile": profile,
-        **contract_fields(profile, module_states),
+        **contract,
+        "synthesis": build_synthesis(profile, contract["claims"], contract["evidence"]),
     }
 
 

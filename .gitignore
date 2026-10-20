@@ -14,6 +14,9 @@ cache/
 !submission/
 !submission/*.json
 !submission/*.jsonl
+!submission/*.md
+!submission/site/
+!submission/site/**
 
 # Private working notes and the email draft stay local (never published)
 CLAUDE.md

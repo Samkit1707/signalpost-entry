@@ -9,6 +9,7 @@ import re
 from typing import Any, Callable
 
 from .identity import full_legal_name_words, org_number_present
+from .synthesis import newest_filed_record
 
 # Module terminal state -> contract availability.
 AVAILABILITY = {
@@ -121,10 +122,9 @@ def _registry_live_claims(record: dict[str, Any]) -> list[tuple[str, Any, str]]:
 
 
 def _financial_claims(record: dict[str, Any]) -> list[tuple[str, Any, str]]:
-    records = _row(record).get("records") or []
-    if not records:
+    latest = newest_filed_record(_row(record).get("records") or [])
+    if not latest:
         return [("latest_annual_accounts", None, "")]
-    latest = max(records, key=lambda item: ((item.get("period") or {}).get("tilDato") or "", item.get("account_type") != "KONSERN"))
     period = latest.get("period") or {}
     span = f"regnskap record {latest.get('record_id')} {latest.get('account_type')} {period.get('fraDato')}..{period.get('tilDato')}"
     return [("latest_annual_accounts", latest, span)]
@@ -276,6 +276,40 @@ def _confidence(module: str, record: dict[str, Any], profile: dict[str, Any], st
     return 0.99
 
 
+def _as_of(field: str, value: Any, record: dict[str, Any]) -> str | None:
+    """The date a fact refers to (fiscal-year end, registration date, publication date), when the source states one."""
+    if field == "latest_annual_accounts" and isinstance(value, dict):
+        return (value.get("period") or {}).get("tilDato")
+    if field == "registered_employees":
+        return _row(record).get("registered_at") or record.get("as_of")
+    if field == "registry_status" and isinstance(value, dict) and value.get("deleted_date"):
+        return value.get("deleted_date")
+    return record.get("effective_at") or None
+
+
+def _dated_news_claims(record: dict[str, Any], state: str, confidence: float | None,
+                       add_evidence: Callable[[str, dict[str, Any]], str], base: dict[str, Any]) -> list[dict[str, Any]]:
+    """One `dated_news` claim per item: title, direct URL and publication date, each with its own evidence."""
+    items = _row(record).get("items") or [] if state == "available" else []
+    claims = []
+    for item in items:
+        evidence_id = add_evidence("dated_news", {
+            "source_url": item.get("source_url"), "source_class": "company_owned", "retrieved_at": item.get("retrieved_at"),
+            "content_sha256": item.get("content_sha256"), "claim_span": f"{item.get('title')} — {item.get('published_at')}",
+            "item_url": item.get("url"), "published_at": item.get("published_at"), "source_kind": item.get("source_kind"),
+            "company_match": item.get("company_match"),
+        })
+        claims.append({"field": "dated_news", "availability": "available", "confidence": confidence,
+                       "value": {key: item.get(key) for key in ("title", "url", "published_at", "source_kind")},
+                       "as_of": item.get("published_at"), "evidence_ids": [evidence_id], "module": "dated_news"})
+    if claims:
+        return claims
+    ids = [add_evidence("dated_news", {**base, "claim_span": None})] if record else []
+    empty_state = "not_available" if state == "available" else state
+    return [{"field": "dated_news", "value": None, "availability": empty_state, "confidence": None, "as_of": None,
+             "evidence_ids": ids, "module": "dated_news"}]
+
+
 def _live_fallback(records: dict[str, Any]) -> bool:
     live = records.get("registry_live") or {}
     return live.get("status") == "available" and bool(_row(live).get("name"))
@@ -297,6 +331,10 @@ def contract_fields(profile: dict[str, Any], module_states: dict[str, dict[str, 
         state = availability(state_info["state"])
         base = {"source_url": record.get("source_url"), "source_class": _source_class(record),
                 "retrieved_at": record.get("retrieved_at"), "content_sha256": record.get("content_sha256")}
+        if module == "dated_news":
+            website_score = ((_row(records.get("website") or {}).get("identity_assessment") or {}).get("score"))
+            claims.extend(_dated_news_claims(record, state, float(website_score) if website_score else None, add_evidence, base))
+            continue
         if module in MULTI_SOURCE:
             module_claims, sources = MULTI_SOURCE[module](record if state == "available" else {})
             ids = [add_evidence(module, {**base, "source_url": source.get("source_url") or source.get("url"),
@@ -334,6 +372,7 @@ def contract_fields(profile: dict[str, Any], module_states: dict[str, dict[str, 
                 "value": value if claim_state == "available" else None,
                 "availability": claim_state,
                 "confidence": _confidence(module, record, profile, claim_state),
+                "as_of": _as_of(field, value, record) if claim_state == "available" else None,
                 "evidence_ids": ids,
                 "module": module,
             })

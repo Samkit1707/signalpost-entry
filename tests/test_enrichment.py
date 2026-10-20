@@ -177,11 +177,13 @@ def test_batch_end_to_end_offline_with_budget(tmp_path, monkeypatch):
 
     monkeypatch.setattr(runner, "fetch_official_modules", fake_official)
     monkeypatch.setattr(runner, "fetch_website", fake_website)
+    monkeypatch.setattr(runner, "fetch_dated_news", lambda profile: (evidence("dated_news", "not_found", "company_site_news", "https://firma.no/"),
+                                                                      {"requests": 0, "bytes": 0, "latencies_ms": []}))
     out = tmp_path / "out"
     argv = ["run", "--organisations", str(inputs), "--bulk", str(bulk), "--output", str(out / "env.jsonl"),
             "--profiles-output", str(out / "profiles.jsonl"), "--report", str(out / "report.json"),
             "--run-id", "t1", "--expected-count", "3", "--workers", "1", "--wikidata-cache", str(cache),
-            "--max-requests", "40", "--no-domain-guess"]
+            "--max-requests", "40", "--no-domain-guess", "--site-dir", str(out / "site")]
     monkeypatch.setattr(sys, "argv", argv)
     try:
         runner.main()
@@ -197,6 +199,7 @@ def test_batch_end_to_end_offline_with_budget(tmp_path, monkeypatch):
     assert first["website"]["value"]["identity_assessment"]["publishable"] is True
     assert first["external_profiles"]["status"] == "available"
     assert first["company_activity"]["status"] == "available"
+    assert report["site"]["status"] == "ok" and (out / "site" / "index.html").exists()
     states = {module["state"] for env in envelopes for module in env["modules"].values()}
     assert states <= {"complete", "not_found", "not_applicable", "budget_exhausted", "source_error", "blocked_policy", "blocked_robots"}
 

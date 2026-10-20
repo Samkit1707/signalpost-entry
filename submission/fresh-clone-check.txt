@@ -1,0 +1,11 @@
+Fresh-clone check, 2026-10-20T10:21Z, uv 0.12.23
+Checked commit 075156a below; the pushed v2 commit has the identical tree plus this file.
+commit 075156a41d11eb74efbada813ad7042fc5a95614
+files_tracked 302
+uv_sync_exit 0
+...........................                                              [100%]
+166 passed, 5 subtests passed in 18.40s
+replay_exit 0
+official_command_help_exit 0
+lockfile_unchanged yes
+live_5_exit 0 (official command, --bulk from local snapshot): validation passed, site ok 5 pages, 5 summaries, 28 requests
