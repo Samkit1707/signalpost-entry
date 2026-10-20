@@ -1,9 +1,7 @@
-Downloading Brønnøysund bulk registry (attempt 1/3) -> cache/brreg-enheter.csv.gz
-Downloading Brønnøysund bulk registry (attempt 2/3) -> cache/brreg-enheter.csv.gz
 {
-  "run_id": "smoke-v2-2026-10-20",
-  "started_at": "2026-10-20T10:06:54.791349Z",
-  "completed_at": "2026-10-20T10:18:46.828056Z",
+  "run_id": "smoke-v3-2026-10-20",
+  "started_at": "2026-10-20T13:11:25.057272Z",
+  "completed_at": "2026-10-20T13:15:42.939443Z",
   "expected_count": 100,
   "emitted_envelopes": 100,
   "resumed_profiles": 0,
@@ -32,22 +30,19 @@ Downloading Brønnøysund bulk registry (attempt 2/3) -> cache/brreg-enheter.csv
     "absent_from_snapshot": []
   },
   "registry_download": {
-    "source": "downloaded",
+    "source": "cache",
     "path": "cache/brreg-enheter.csv.gz",
-    "url": "https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv",
-    "requests": 2,
-    "bytes": 155098913,
-    "elapsed_ms": 499170,
-    "retrieved_at": "2026-10-20T10:15:13Z"
+    "requests": 0,
+    "url": "https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv"
   },
   "operations": {
-    "requests": 634,
-    "bytes": 167460959,
-    "p50_ms": 277,
-    "p95_ms": 1542,
-    "requests_per_company": 6.34,
-    "projected_requests_for_1000": 6340,
-    "runtime_ms": 713546
+    "requests": 887,
+    "bytes": 33818856,
+    "p50_ms": 246,
+    "p95_ms": 6065,
+    "requests_per_company": 8.87,
+    "projected_requests_for_1000": 8870,
+    "runtime_ms": 259070
   },
   "budget": {
     "max_requests": null,
@@ -58,8 +53,8 @@ Downloading Brønnøysund bulk registry (attempt 2/3) -> cache/brreg-enheter.csv
     "enabled": true,
     "status": "ok",
     "indexed_organisations": 1,
-    "requests": 1,
-    "cached": false,
+    "requests": 0,
+    "cached": true,
     "retrieved_at": "2026-10-20T10:15:50.738746Z",
     "content_sha256": "e4fb8cf085da969b99a4309d7cf12fae7dbfad221e699e7498bb7f72b31edd52"
   },
@@ -72,11 +67,11 @@ Downloading Brønnøysund bulk registry (attempt 2/3) -> cache/brreg-enheter.csv
     "group": 8,
     "locations": 100,
     "wikidata_footprint": 1,
-    "website": 10,
+    "website": 11,
     "workforce": 10,
     "external_profiles": 2,
-    "company_activity": 3,
-    "company_jobs": 0,
+    "company_activity": 4,
+    "company_jobs": 1,
     "dated_news": 4
   },
   "validation": {
@@ -93,18 +88,18 @@ Downloading Brønnøysund bulk registry (attempt 2/3) -> cache/brreg-enheter.csv
   "site": {
     "status": "ok",
     "path": "out/site/index.html",
-    "run_id": "smoke-v2-2026-10-20",
-    "completed_at": "2026-10-20T10:18:46.828056Z",
+    "run_id": "smoke-v3-2026-10-20",
+    "completed_at": "2026-10-20T13:15:42.939443Z",
     "companies": 100,
     "company_pages": 100,
     "with_summary": 100,
-    "with_verified_website": 6,
+    "with_verified_website": 7,
     "with_dated_news": 4,
     "entry": "index.html",
     "compare": "compare.html"
   },
   "synthesis": {
     "envelopes_with_summary": 100,
-    "sentences": 627
+    "sentences": 902
   }
 }

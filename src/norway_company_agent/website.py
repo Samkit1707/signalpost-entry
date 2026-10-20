@@ -266,6 +266,85 @@ def _priority_links(base_url: str, soup: BeautifulSoup, limit: int = 4) -> list[
     return unique[:limit]
 
 
+# Pages that carry a company's legal identity: contact, about, then legal/privacy (checked when probing a candidate).
+PROBE_TERMS = (("kontakt", "contact"), ("om-oss", "om_oss", "about", "hvem-er-vi", "selskapet", "firma"),
+               ("personvern", "privacy", "vilkar", "vilkår", "juridisk", "legal", "impressum", "salgsbetingelser", "terms"))
+
+
+def probe_links(base_url: str, soup: BeautifulSoup, limit: int = 2) -> list[str]:
+    """At most `limit` same-host identity pages (contact, about, legal), in that order of preference."""
+    base = urllib.parse.urlparse(base_url)
+    found: dict[int, str] = {}
+    for anchor in soup.select("a[href]"):
+        url = urllib.parse.urljoin(base_url, str(anchor.get("href") or "").strip())
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() != base.netloc.lower():
+            continue
+        clean = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path or "/", "", "", ""))
+        if clean.rstrip("/") == base_url.rstrip("/"):
+            continue
+        haystack = (urllib.parse.unquote(parsed.path) + " " + anchor.get_text(" ", strip=True)).casefold()
+        for rank, terms in enumerate(PROBE_TERMS):
+            if rank not in found and any(term in haystack for term in terms):
+                found[rank] = clean
+                break
+    ordered = []
+    for rank in sorted(found):
+        if found[rank] not in ordered:
+            ordered.append(found[rank])
+    return ordered[:limit]
+
+
+def _postal_address(value: Any) -> str | None:
+    if isinstance(value, str):
+        return " ".join(value.split()) or None
+    if isinstance(value, list):
+        return _postal_address(value[0]) if value else None
+    if not isinstance(value, dict):
+        return None
+    parts = [value.get("streetAddress"), " ".join(str(part) for part in (value.get("postalCode"), value.get("addressLocality")) if part)]
+    return ", ".join(" ".join(str(part).split()) for part in parts if part and str(part).strip()) or None
+
+
+def _image_url(value: Any) -> str | None:
+    if isinstance(value, list):
+        value = value[0] if value else None
+    if isinstance(value, dict):
+        value = value.get("url") or value.get("contentUrl")
+    return value if isinstance(value, str) and value.startswith(("http://", "https://")) else None
+
+
+def site_contact(base_url: str, soup: BeautifulSoup, organisations: list[dict[str, Any]], pages_soups: list[tuple[str, BeautifulSoup]] = ()) -> dict[str, Any]:
+    """Contact facts a site states about itself: JSON-LD Organization on its own domain, own-domain mailto, footer tel links."""
+    domain = _registered_domain(base_url)
+    own = []
+    for item in organisations:
+        url = str(item.get("url") or item.get("@id") or "")
+        if url.startswith("http") and _registered_domain(url) != domain:
+            continue  # e.g. the web agency credited in the markup
+        entry = {"name": item.get("name") if isinstance(item.get("name"), str) else None,
+                 "address": _postal_address(item.get("address")),
+                 "telephone": " ".join(str(item.get("telephone") or "").split()) or None,
+                 "email": str(item.get("email") or "").removeprefix("mailto:").strip().casefold() or None,
+                 "logo": _image_url(item.get("logo"))}
+        if entry["email"] and _registered_domain("https://" + entry["email"].split("@")[-1]) != domain:
+            entry["email"] = None
+        if any(entry[key] for key in ("address", "telephone", "email", "logo")):
+            own.append(entry)
+    emails, phones = [], []
+    for page_url, page_soup in [(base_url, soup), *pages_soups]:
+        for node in page_soup.select('a[href^="mailto:"]'):
+            email = urllib.parse.unquote(str(node.get("href"))[7:].split("?")[0]).strip().casefold()
+            if "@" in email and _registered_domain("https://" + email.split("@")[-1]) == domain and email not in emails:
+                emails.append(email)
+        for node in page_soup.select('footer a[href^="tel:"], address a[href^="tel:"], [itemprop="telephone"]'):
+            raw = str(node.get("href") or node.get_text(" ", strip=True)).removeprefix("tel:")
+            digits = "".join(ch for ch in raw if ch.isdigit() or ch == "+")
+            if len(digits.lstrip("+")) >= 8 and digits not in phones:
+                phones.append(digits)
+    return {"organisations": own[:5], "emails": emails[:5], "phones": phones[:3]}
+
+
 _DATE_RE = __import__("re").compile(r"(20\d{2})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])")
 
 
@@ -318,7 +397,7 @@ def job_postings(structured: dict[str, Any] | None) -> list[dict[str, Any]]:
     return jobs[:50]
 
 
-def _fetch_secondary_page(url: str, *, homepage_domain: str, timeout: float, max_bytes: int) -> tuple[dict[str, Any] | None, list[dict[str, str]], int, int, int, str | None]:
+def _fetch_secondary_page(url: str, *, homepage_domain: str, timeout: float, max_bytes: int, probe: bool = False) -> tuple[dict[str, Any] | None, list[dict[str, str]], int, int, int, str | None]:
     robots_request = 0 if robots_cached(url) else 1
     if not _robots_allowed(url, timeout):
         return None, [], robots_request, 0, 0, "robots.txt disallows page"
@@ -354,9 +433,20 @@ def _fetch_secondary_page(url: str, *, homepage_domain: str, timeout: float, max
         }
         if page["category"] == "news":
             page["news_items"] = news_listing_items(final_url, page_soup)
+        if page["category"] == "identity" or probe:
+            page["category"] = page["category"] or "identity"
+            page["site_contact"] = site_contact(final_url, page_soup, [])
         return page, _social_links(final_url, page_soup), 2, len(raw), elapsed, None
     except Exception as exc:
         return None, [], page_request_count, 0, int((time.monotonic() - started) * 1000), f"{type(exc).__name__}: {str(exc)[:120]}"
+
+
+def _merge_contact(base: dict[str, Any], others: list[dict[str, Any]]) -> dict[str, Any]:
+    merged = {key: list(base.get(key) or []) for key in ("organisations", "emails", "phones")}
+    for other in others:
+        for key in ("emails", "phones"):
+            merged[key] += [item for item in other.get(key) or [] if item not in merged[key]]
+    return {"organisations": merged["organisations"][:5], "emails": merged["emails"][:5], "phones": merged["phones"][:3]}
 
 
 def _jsonld_organisations(metadata: dict[str, Any]) -> list[dict[str, Any]]:
@@ -382,7 +472,10 @@ def _extraction_state(text: str, soup: BeautifulSoup) -> str:
     return "js_fallback_candidate" if len(text.strip()) < 100 and len(soup.select("script[src]")) >= 2 else "static_complete"
 
 
-def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_000_000, source_type: str = "registry_linked_company_website") -> tuple[dict[str, Any], dict[str, Any]]:
+def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_000_000, source_type: str = "registry_linked_company_website",
+                  probe: bool = False, probe_terms: list[str] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Fetch a homepage and up to 4 category pages. probe=True (website candidates) instead checks at most 2
+    identity pages (contact, about, legal), and only when the homepage mentions one of `probe_terms` (if given)."""
     supplied_url = str(url or "").strip()
     supplied_scheme = bool(re.match(r"^https?://", supplied_url, re.I))
     normalized = normalize_homepage(url)
@@ -438,12 +531,19 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
         bytes_received = len(raw)
         page_latencies = [elapsed]
         homepage_domain = value["registered_domain"]
-        for page_url in _priority_links(final_url, soup):
+        if probe:
+            folded = " ".join([title, description, text, value["identity_text_excerpt"]]).casefold()
+            mentions = probe_terms is None or any(term in folded for term in probe_terms)
+            page_urls = probe_links(final_url, soup) if mentions else []
+        else:
+            page_urls = _priority_links(final_url, soup)
+        for page_url in page_urls:
             page, page_social, page_requests, page_bytes, page_elapsed, page_error = _fetch_secondary_page(
                 page_url,
                 homepage_domain=homepage_domain,
                 timeout=timeout,
                 max_bytes=min(max_bytes, 1_000_000),
+                probe=probe,
             )
             requests += page_requests
             bytes_received += page_bytes
@@ -455,6 +555,9 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
             elif page_error:
                 crawl_errors.append({"url": page_url, "error": page_error})
         value["pages"] = pages
+        social.extend(structured_social_links(value["structured_organisations"]))
+        value["site_contact"] = _merge_contact(site_contact(final_url, soup, value["structured_organisations"]),
+                                               [page.get("site_contact") or {} for page in pages[1:]])
         value["social_links"] = list({(item["platform"], item["url"]): item for item in social}.values())
         value["crawl_errors"] = crawl_errors
         return evidence("website", "available", source_type, final_url, value=value, note="Company-controlled claim layer; not an official registry fact", content_sha256=value["content_sha256"]), {"requests": requests, "bytes": bytes_received, "latencies_ms": page_latencies}
@@ -465,7 +568,8 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
     except urllib.error.URLError as exc:
         if not supplied_scheme and normalized.startswith("https://"):
             first_elapsed = int((time.monotonic() - started) * 1000)
-            record, metrics = fetch_website("http://" + supplied_url, timeout=timeout, max_bytes=max_bytes, source_type=source_type)
+            record, metrics = fetch_website("http://" + supplied_url, timeout=timeout, max_bytes=max_bytes, source_type=source_type,
+                                            probe=probe, probe_terms=probe_terms)
             metrics["requests"] += 2
             metrics["latencies_ms"].insert(0, first_elapsed)
             return record, metrics

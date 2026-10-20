@@ -1,11 +1,10 @@
-Fresh-clone check, 2026-10-20T10:21Z, uv 0.12.23
-Checked commit 075156a below; the pushed v2 commit has the identical tree plus this file.
-commit 075156a41d11eb74efbada813ad7042fc5a95614
-files_tracked 302
+Fresh-clone check, 2026-10-20, uv 0.12.23
+Checked commit 6d78e0e below; the pushed v3 commit has the identical tree plus this file.
+commit 6d78e0ee5833c39e661346a9b51e8a148376879f
+files_tracked 310
 uv_sync_exit 0
-...........................                                              [100%]
-166 passed, 5 subtests passed in 18.40s
+177 passed, 5 subtests passed in 20.76s
 replay_exit 0
 official_command_help_exit 0
 lockfile_unchanged yes
-live_5_exit 0 (official command, --bulk from local snapshot): validation passed, site ok 5 pages, 5 summaries, 28 requests
+live_5_exit 0 (official command, --bulk from local snapshot): validation passed, site ok 5 pages, 5 summaries, 42 requests, runtime 73.9 s (monotonic; wall clock longer because the laptop slept mid-run)

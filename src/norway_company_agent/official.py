@@ -150,6 +150,7 @@ def normalize_locations(body: Any) -> dict[str, Any]:
         "address": item.get("beliggenhetsadresse") or item.get("postadresse"),
         "industry": item.get("naeringskode1"),
         "employees": item.get("antallAnsatte"),
+        "start_date": item.get("oppstartsdato"),
     } for item in rows]}
 
 
@@ -170,6 +171,12 @@ def normalize_entity(body: Any) -> dict[str, Any]:
         # Deleted entities still answer HTTP 200, as respons_klasse "SlettetEnhet" with a slettedato.
         "deleted": body.get("respons_klasse") == "SlettetEnhet" or bool(body.get("slettedato")),
         "deleted_date": body.get("slettedato"),
+        # Further registry attributes for fact-level claims when the bulk row is missing (see facts.live_as_bulk_row).
+        "extras": {key: body.get(key) for key in (
+            "stiftelsesdato", "registreringsdatoEnhetsregisteret", "registrertIMvaregisteret", "registrertIForetaksregisteret",
+            "registrertIFrivillighetsregisteret", "registrertIStiftelsesregisteret", "overordnetEnhet", "epostadresse", "telefon",
+            "mobil", "fravalgRevisjonDato", "naeringskode2", "naeringskode3", "institusjonellSektorkode", "kapital",
+            "vedtektsfestetFormaal", "aktivitet") if body.get(key) not in (None, "", [], {})},
     }
 
 

@@ -1,29 +1,35 @@
-# Submission evidence (v2)
+# Submission evidence (v3)
 
-All files here come from one run of the official command on the 100-company smoke batch (20 Oct 2026):
+Official command (after `uv sync`), run on 20 Oct 2026; the registry bulk snapshot was reused from `cache/` (same day):
 
 ```bash
-uv run python scripts/run_competition_batch.py --organisations smoke-companies.jsonl \
+uv run python scripts/run_competition_batch.py --organisations "$INPUT" \
   --profiles-output out/profiles.jsonl --output out/envelopes.jsonl --report out/run-report.json \
-  --run-id smoke-v2-2026-10-20 --expected-count 100 --deadline-minutes 40
+  --run-id "$RUN_ID" --expected-count "$COUNT" --deadline-minutes 40
 ```
 
 | File | Content |
 |---|---|
-| `smoke-report.json` | run report: 100/100 envelopes, validation passed, 634 requests, p50 277 ms, p95 1,542 ms, $0; `site` and `synthesis` sections |
-| `smoke-envelopes.jsonl` | the 100 envelopes (claims, evidence, `synthesis`, `dated_news` claims) |
-| `site/` | the static site the same command wrote to `out/site/` — open `site/index.html` |
-| `smoke-run.log` | stdout of the run |
-| `synthesis-news-audit.json` | rule audit over the 100 envelopes (see below) |
-| `tests.txt` | offline test result |
-| `fresh-clone-check.txt` | clone → `uv sync --frozen` → tests → replay demo → command help |
+| `smoke-report.json`, `smoke-envelopes.jsonl`, `smoke-run.log` | 100-company smoke: 100/100 envelopes, validation passed, 887 requests, p95 6,065 ms, 259 s, $0 |
+| `site/` | the static site the smoke run wrote to `out/site/` — open `site/index.html` |
+| `run-1000-report.json` | 1,000-company run: validation passed, 1,000 envelopes, 1,085 s (18 min, deadline 40), 8,269 requests (8.27 per company), p50 186 ms, p95 4,159 ms, 0 companies `budget_exhausted`, 60 verified websites, 17 with dated news |
+| `recall-300.json` | per-family recall, v2 (45c0977) vs v3 on the same 300 companies and snapshot (`scripts/measure_recall.py`) |
+| `audit-v3.html` | every website newly published on the 300 sample, weakest proof first (`scripts/audit_websites.py`) |
+| `synthesis-news-audit.json` | rule audit over the 100 smoke envelopes |
+| `tests.txt`, `fresh-clone-check.txt` | offline tests; clone → `uv sync --frozen` → tests → replay → live 5-company run |
 
-Run time 714 s, of which 499 s was the one-off ~155 MB registry bulk download (slow link, one retry; inside the
-40-minute deadline). Without the download the 100 companies took ~3.5 minutes.
+`audit-v3.html` was generated before the final rule "a name-derived `.com` publishes only on the printed
+organisation number" was added; under that rule its weakest row (safetron.com, name + registry details) is no longer
+published, so the 300-sample website count is 21, not 22. springbrands.no shows as "published by v2, not by v3"
+because the site answered HTTP 429 on that run, not because of a rule change.
 
-Audit (`synthesis-news-audit.json`): 100/100 envelopes have a summary; 627 sentences, 0 without evidence ids,
-0 citing ids missing from the envelope; "latest" accounts = newest filed year for 100/100 (FY2025 for 99, FY2024 is
-the newest filing for one); 91 change sentences, all backed by two filed years; 0 null figures rendered as 0;
-29 `dated_news` claims for 4 companies, 0 off the verified site's domain.
+300-company sample, v2 → v3 (companies covered / facts): registry identity 300/1,868 → 300/4,733; contact 0/0 →
+110/214; roles 300/1,144 → 300/1,144 (now 1,444 separate role claims); sub-units 222/225 → 222/225 (now one claim
+each); financials 299/1,436 → 299/3,968 (every filed year); group 17/51 → 17/51; verified website 18 → 21;
+external profiles 10/25 → 13/32; jobs 2/2 → 4/4; news/activity 10/54 → 12/80. Requests per company 6.18 → 8.19
+(projected 8,190 per 1,000), p95 1,581 → 3,875 ms.
 
-Coverage on this batch: verified website 10 (6 publishable), dated news 4, external profiles 2, company activity 3.
+Smoke audit: 100/100 summaries, 902 sentences all with existing evidence ids; latest accounts = newest filed year
+100/100; 91 trend sentences all backed by two filed years; 0 nulls rendered as 0; 29 dated-news claims, 0 off-site;
+2,835 fact-level claims, all with evidence and a value. One newly published smoke website (insbo.no) prints the
+exact organisation number on its own page.

@@ -55,3 +55,7 @@ Each envelope also carries:
 - `synthesis`: `{"method", "sentences": [{"topic", "text", "evidence_ids"}], "narrative", "latest_fiscal_year"}`.
   Topics are `what_it_does`, `financials`, `changes`, `unknown`. Every sentence cites evidence ids present in
   `evidence[]`; `narrative` is the sentences joined with their ids in brackets.
+
+v3 adds fact-level claims (`"fact_level": true`): one claim per role, sub-unit, filed figure per year, registry
+attribute, group relationship, profile, careers page, job posting and site contact detail, each with its own evidence
+entry and `as_of`. Aggregate claims from v1/v2 are unchanged. Field list: README, "v3 of this entry".

@@ -10,6 +10,7 @@ import argparse  # noqa: E402
 import json  # noqa: E402
 import sys  # noqa: E402
 import threading  # noqa: E402
+from urllib.parse import urlparse  # noqa: E402
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -40,7 +41,7 @@ from norway_company_agent.enrichment import (  # noqa: E402
     workforce_record,
 )
 from norway_company_agent.evidence import evidence  # noqa: E402
-from norway_company_agent.domain_guess import guess_website  # noqa: E402
+from norway_company_agent.domain_guess import discover_website  # noqa: E402
 from norway_company_agent.news import MAX_REQUESTS as NEWS_MAX_REQUESTS, fetch_dated_news  # noqa: E402
 from norway_company_agent.site import build_site  # noqa: E402
 
@@ -193,14 +194,25 @@ def main() -> None:
                 website_record, website_metrics = fetch_website(url, source_type=source_type)
                 profile["evidence"]["website"] = apply_website_identity_gate(profile, website_record)["website"]
                 apply_wikidata_identity_support(profile, wiki)
-                if not url and not args.no_domain_guess:
-                    accepted, guess_metrics, trail = guess_website(profile, fetch_website, apply_website_identity_gate)
+                current = profile["evidence"]["website"]
+                published = bool(((current.get("value") or {}).get("identity_assessment") or {}).get("publishable"))
+                if not published and not args.no_domain_guess:
+                    tried = {urlparse(item).hostname or "" for item in (url, (current.get("value") or {}).get("final_url")) if item}
+                    tried = {host.removeprefix("www.") for host in tried if host}
+                    deadline_ok = lambda: not (args.deadline_minutes and (time.monotonic() - clock_start) > args.deadline_minutes * 60)  # noqa: E731
+                    accepted, guess_metrics, trail = discover_website(profile, fetch_website, apply_website_identity_gate,
+                                                                      tried=tried, keep_going=deadline_ok)
                     for key in ("requests", "bytes"):
                         website_metrics[key] += guess_metrics[key]
                     website_metrics["latencies_ms"] = website_metrics["latencies_ms"] + guess_metrics["latencies_ms"]
                     if trail:
-                        profile["website_discovery"] = {"method": "name_derived_domain_with_org_number_proof", "candidates": trail}
+                        profile["website_discovery"] = {"method": "ordered_candidates_with_org_number_proof_v3", "candidates": trail,
+                                                        "replaced": None}
                     if accepted:
+                        if current.get("status") == "available":
+                            profile["website_discovery"]["replaced"] = {
+                                "url": (current.get("value") or {}).get("final_url"), "source_type": current.get("source_type"),
+                                "identity_status": ((current.get("value") or {}).get("identity_assessment") or {}).get("status")}
                         profile["evidence"]["website"] = accepted
             if "dated_news" in requested_modules:
                 news_record, news_metrics = fetch_dated_news(profile)

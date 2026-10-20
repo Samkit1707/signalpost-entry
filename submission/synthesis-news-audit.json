@@ -1,15 +1,17 @@
 {
   "envelopes": 100,
   "with_synthesis": 100,
-  "sentences": 627,
+  "sentences": 902,
   "sentences_without_evidence": 0,
   "sentences_citing_unknown_ids": 0,
   "latest_is_newest_filed_year": 100,
   "latest_checked": 100,
-  "fy2025_latest": 99,
   "trend_sentences": 91,
   "trend_with_two_filed_years": 91,
   "null_figure_rendered_as_zero": 0,
   "dated_news_claims": 29,
-  "dated_news_off_site": 0
+  "dated_news_off_site": 0,
+  "fact_level_claims": 2835,
+  "fact_claims_without_evidence": 0,
+  "fact_claims_null_value": 0
 }

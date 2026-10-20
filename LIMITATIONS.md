@@ -13,3 +13,9 @@
 - The synthesis is template-based from the envelope's own claims. It states no trend without two filed years of the
   same account type that both report the figure, and it does not interpret beyond the sources.
 - The compare view needs JavaScript; company pages and the index list are plain HTML.
+- Website candidates publish only on the printed organisation number (or full name + two registry details on `.no`);
+  many real sites that print neither stay unpublished by design. Registry e-mail domains are often an accountant's
+  or property manager's and are rejected by the same rule.
+- Role start dates are not in the Brønnøysund roles API; `role` claims carry the role group's last-changed date.
+- Group detection uses Norwegian group structure only: a foreign parent's site is caught by the `.com`
+  org-number rule, not labelled as a group site.

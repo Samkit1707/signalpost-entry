@@ -9,6 +9,7 @@ import re
 from typing import Any, Callable
 
 from .identity import full_legal_name_words, org_number_present
+from .facts import fact_claims, live_as_bulk_row
 from .synthesis import newest_filed_record
 
 # Module terminal state -> contract availability.
@@ -376,4 +377,35 @@ def contract_fields(profile: dict[str, Any], module_states: dict[str, dict[str, 
                 "evidence_ids": ids,
                 "module": module,
             })
+    # Group sites are labelled as a relationship, never as the company's own website.
+    website_record = records.get("website") or {}
+    group_site = (_row(website_record).get("identity_assessment") or {}).get("group_site")
+    group_sites = []
+    if group_site and website_record.get("status") == "available":
+        group_sites.append((_row(website_record).get("final_url"), group_site, {
+            "source_url": website_record.get("source_url"), "retrieved_at": website_record.get("retrieved_at"),
+            "content_sha256": website_record.get("content_sha256")}))
+    for item in (profile.get("website_discovery") or {}).get("candidates") or []:
+        if item.get("group_site") and item.get("final_url"):
+            group_sites.append((item["final_url"], item["group_site"], {"source_url": item["final_url"], "retrieved_at": item.get("retrieved_at"),
+                                                                        "content_sha256": item.get("content_sha256")}))
+    for url, label, source in {url: (url, label, source) for url, label, source in group_sites}.values():
+        evidence_id = add_evidence("website", {**source, "source_class": "company_owned",
+                                               "claim_span": f"group organisation number(s) {', '.join(label['organisation_numbers'])} on {url}"})
+        claims.append({"field": "group_website", "value": {"url": url, "relationship": label["relationship"],
+                                                           "group_organisation_numbers": label["organisation_numbers"]},
+                       "availability": "available", "confidence": 0.9, "as_of": None, "evidence_ids": [evidence_id],
+                       "module": "website", "fact_level": True})
+    # Fact-level claims (one per role, sub-unit, filed figure, registry attribute, profile, posting, site contact).
+    registry_record, registry_row = None, None
+    if (module_states.get("registry") or {}).get("state") == "complete":
+        registry_record = records.get("registry")
+        registry_row = _row(registry_record)
+    elif "registry" in module_states and _live_fallback(records):
+        registry_record = records["registry_live"]
+        registry_row = live_as_bulk_row(_row(registry_record))
+    group_related = _group_claims(records["group"])[0][1] if (records.get("group") or {}).get("status") == "available" else None
+    website_score = ((_row(records.get("website") or {}).get("identity_assessment") or {}).get("score"))
+    claims.extend(fact_claims(profile, records, module_states, add_evidence, float(website_score) if website_score else None,
+                              registry_row, registry_record, group_related))
     return {"claims": claims, "evidence": evidence_list}

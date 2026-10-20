@@ -42,6 +42,45 @@ def org_number_present(text: Any, org: str) -> bool:
     return bool(re.search(pattern, str(text or "")))
 
 
+_ORG_NUMBER_RE = re.compile(r"(?<!\d)(\d{3})[\s.\u00a0-]?(\d{3})[\s.\u00a0-]?(\d{3})(?!\d)")
+
+
+def org_numbers_in(text: Any) -> set[str]:
+    """Organisation-number-shaped tokens (9 digits, optionally 3-3-3 spaced) with a valid mod-11 check digit."""
+    found = set()
+    for match in _ORG_NUMBER_RE.finditer(str(text or "")):
+        digits = "".join(match.groups())
+        weights = (3, 2, 7, 6, 5, 4, 3, 2)
+        remainder = sum(int(d) * w for d, w in zip(digits[:8], weights)) % 11
+        check = 0 if remainder == 0 else 11 - remainder
+        if check != 10 and check == int(digits[8]) and digits[0] in "89":
+            found.add(digits)
+    return found
+
+
+def related_org_numbers(profile: dict[str, Any]) -> set[str]:
+    """Other entities of the same corporate group (Brønnøysund konsernstruktur) and the registered parent unit."""
+    own = str(profile.get("organisation_number") or "")
+    numbers: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            number = str(node.get("organisasjonsnummer") or "")
+            if len(number) == 9 and number != own:
+                numbers.add(number)
+            for child in node.get("children") or []:
+                walk(child)
+
+    group = (profile.get("evidence") or {}).get("group") or {}
+    if group.get("status") == "available":
+        walk(group.get("value") or {})
+    row = ((profile.get("evidence") or {}).get("registry") or {}).get("value") or {}
+    parent = re.sub(r"\D", "", str(row.get("overordnetEnhet") or ""))
+    if len(parent) == 9 and parent != own:
+        numbers.add(parent)
+    return numbers
+
+
 LEGAL_FORM_SUFFIXES = {"as", "asa", "ans", "da", "enk", "sa", "nuf", "ba", "bbl", "iks", "ks", "sf", "stiftelse"}
 POST_BOX_PREFIXES = ("postboks", "boks", "pb", "postbox", "p o box")
 
@@ -220,6 +259,7 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
     exact_homepage_name = bool(core and any(set(core).issubset(tokens) for tokens in homepage_token_sets))
     substantive_homepage = len(str(value.get("main_text_excerpt") or "").strip()) >= 100
     proof = footer_registry_proof(profile, value)
+    homepage_numbers = org_numbers_in(homepage_candidate_text)
     is_business_sports_club = bool(re.search(r"(?:^|\s)B\.?\s*I\.?\s*L\.?(?:\s|$)", str(profile.get("name") or ""), re.I))
     if any(marker in normalized_raw for marker in parked_markers):
         score = 0.1
@@ -227,7 +267,8 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
     elif is_business_sports_club and "bedriftsidrett" not in normalized_candidate_text and "b i l" not in normalized_candidate_text:
         score = 0.3
         reasons.append("business sports-club entity points to the operating company's site without club evidence")
-    elif org_digits and org_digits in compact_homepage_candidate:
+    elif org_digits and org_number_present(homepage_candidate_text, org_digits) and len(homepage_numbers - {org_digits}) == 0:
+        # v3 (stricter): a standalone token, and no other organisation number on the homepage (group/portfolio pages).
         score = 1.0
         reasons.append("exact organisation number appears in homepage identity evidence")
     elif len(core) >= 2 and exact_homepage_name:
@@ -260,6 +301,19 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
                 score = 1.0
                 reasons.append(f"exact organisation number appears on the company's own page {page.get('url')}")
                 break
+    other_numbers = sorted(homepage_numbers - {org_digits})
+    if other_numbers and org_number_present(homepage_candidate_text, org_digits):
+        # v3 (stricter): a homepage listing this and other organisation numbers is a group/portfolio/directory page.
+        score = min(score, 0.6)
+        reasons.append(f"homepage lists other organisation number(s) ({', '.join(other_numbers[:3])}) next to this one; "
+                       "multi-entity page, not published")
+    group_numbers = sorted(related_org_numbers(profile) & org_numbers_in(candidate_text))
+    group_site = None
+    if group_numbers:
+        # v3: a page showing the parent's or a group member's organisation number is the group's site, never this company's.
+        group_site = {"organisation_numbers": group_numbers, "relationship": "site shows organisation number(s) of the corporate group / parent"}
+        score = min(score, 0.6)
+        reasons.append(f"site shows group/parent organisation number(s) {', '.join(group_numbers)}: labelled as group site, not published")
     landing = landing_checks(value)
     requires_org_number = landing["cross_domain_redirect"] or landing["deep_path_landing"]
     if requires_org_number and 0.3 < score < 1.0:
@@ -280,7 +334,8 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
         "registry_detail_proof": proof,
         "landing": landing,
         "requires_org_number": requires_org_number,
-        "method": "deterministic_name_org_evidence_v3",
+        "group_site": group_site,
+        "method": "deterministic_name_org_evidence_v4",
     }
 
 

@@ -355,6 +355,69 @@ def _value_html(fact: dict[str, Any]) -> str:
     return text
 
 
+FACT_LABELS = {
+    "role": "Role", "registered_location": "Registered sub-unit", "annual_revenue": "Revenue", "operating_result": "Operating result",
+    "annual_result": "Annual result", "equity": "Equity", "total_assets": "Total assets", "nace_code": "NACE code",
+    "founding_date": "Founded", "registration_date": "Registered", "share_capital": "Share capital", "vat_registered": "VAT register",
+    "register_membership": "Register", "institutional_sector": "Institutional sector", "parent_entity": "Parent unit",
+    "registered_purpose": "Registered purpose", "registered_activity": "Registered activity", "auditor_opt_out": "Auditor",
+    "registry_email": "Registry e-mail", "registry_phone": "Registry phone", "group_relationship": "Group relationship",
+    "external_profile": "Profile", "careers_page": "Careers page", "job_posting": "Job posting", "site_address": "Address on website",
+    "site_phone": "Phone on website", "site_email": "E-mail on website", "site_logo": "Logo", "group_website": "Group website",
+}
+
+
+def fact_text(field: str, value: Any) -> tuple[str, str | None]:
+    """Readable text and optional link for a fact-level claim value."""
+    if not isinstance(value, dict):
+        text = str(value)
+        return text, (value if field == "site_logo" else None)
+    if field == "role":
+        return f"{value.get('role')}: {value.get('name')}", None
+    if field == "registered_location":
+        parts = [value.get("name"), value.get("address"), f"NACE {value['nace_code']}" if value.get("nace_code") else None,
+                 f"{value['employees']} employees" if value.get("employees") is not None else None, f"org. no. {value.get('organisation_number')}"]
+        return " · ".join(str(part) for part in parts if part), None
+    if "amount" in value and "fiscal_year" in value:
+        return f"FY{value['fiscal_year']}: {money(value['amount'], value.get('currency'))}", None
+    if field == "nace_code":
+        return f"{value.get('code')} {value.get('description') or ''} ({'main' if value.get('rank') == 1 else 'secondary'})".strip(), None
+    if field == "share_capital":
+        return f"{money(value.get('amount'), value.get('currency'))}" + (f" · {value['shares']} shares" if value.get("shares") else ""), None
+    if field in {"vat_registered", "register_membership"}:
+        return f"{value.get('register')}: {'registered' if value.get('registered') else 'not registered'}", None
+    if field in {"parent_entity", "group_relationship"}:
+        return f"{value.get('relationship')}: {value.get('name') or ''} ({value.get('organisation_number')})".replace(":  (", ": ("), None
+    if field == "institutional_sector":
+        return f"{value.get('code')} {value.get('description') or ''}".strip(), None
+    if field == "auditor_opt_out":
+        return "Opted out of audit", None
+    if field == "registry_phone":
+        return str(value.get("number")), None
+    if field in {"external_profile", "careers_page"}:
+        return f"{value.get('platform') or value.get('title') or ''} {value.get('url')}".strip(), value.get("url")
+    if field == "job_posting":
+        return f"{value.get('title')}" + (f" (posted {value['date_posted'][:10]})" if value.get("date_posted") else ""), value.get("source_url")
+    if field == "group_website":
+        return f"{value.get('url')} — {value.get('relationship')}", value.get("url")
+    return json.dumps(value, ensure_ascii=False)[:200], None
+
+
+def facts_table(envelope: dict[str, Any]) -> str:
+    evidence = _evidence_map(envelope)
+    rows = []
+    for claim in envelope.get("claims") or []:
+        if not claim.get("fact_level") or claim.get("availability") != "available":
+            continue
+        text, link = fact_text(claim["field"], claim["value"])
+        fact = {**_source(envelope, claim, evidence), "text": text, "link": safe_url(link), "missing": False}
+        rows.append(f'<tr><td>{esc(FACT_LABELS.get(claim["field"], claim["field"]))}</td><td>{_value_html(fact)}</td><td>{_source_html(fact)}</td></tr>')
+    if not rows:
+        return '<p class="empty">No fact-level claims.</p>'
+    return (f'<details><summary>{len(rows)} individual facts, each with its source and date</summary><div class="scroll"><table class="facts">'
+            f'<thead><tr><th>Fact</th><th>Value</th><th>Source and date</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div></details>')
+
+
 def company_page(envelope: dict[str, Any], record: dict[str, Any], run: dict[str, Any]) -> str:
     org = envelope["organisation_number"]
     evidence = _evidence_map(envelope)
@@ -427,6 +490,7 @@ def company_page(envelope: dict[str, Any], record: dict[str, Any], run: dict[str
             f'<h2>Summary</h2><section class="summary" aria-label="Sourced summary">{summary_html}</section>'
             f'<h2>Facts</h2><div class="scroll"><table class="facts"><thead><tr><th>Fact</th><th>Value</th><th>Source and date</th></tr></thead>'
             f'<tbody>{fact_rows}</tbody></table></div>'
+            f'<h2>All facts</h2>{facts_table(envelope)}'
             f'<h2>Filed annual accounts</h2>{fin_html}'
             f'<h2>Dated news from its verified website</h2>{news_html}'
             f'<h2>Registered roles</h2>{roles_html}'

@@ -75,7 +75,7 @@ uv run python scripts/run_competition_batch.py \
 uv run --with pytest pytest -q
 ```
 
-The original starter archive was clean-room verified by Builderr on August 24, 2026 (104 tests). This entry has **166 tests and 5 subtests passing offline**, and has been run live on a 100-company smoke batch (`submission/smoke-report.json`) and a 998-company rehearsal.
+The original starter archive was clean-room verified by Builderr on August 24, 2026 (104 tests). This entry has **177 tests and 5 subtests passing offline**, and has been run live on a 100-company smoke batch (`submission/smoke-report.json`) and a 998-company rehearsal.
 
 Increase `--count` and `--expected-count` together for a larger local test. The 100-row smoke test above is practice only; Builderr supplies the companies for every official run.
 
@@ -211,3 +211,35 @@ Identity and precision rules (website gate, guessed domains, social links, Wikid
 The starter's `scripts/build_prototype.py` viewer is kept for reference. The new site reuses its evidence-inspection
 pattern (source, class, retrieval time, SHA-256), its palette and its diacritic-insensitive search. Unlike that viewer,
 the official run writes the site, and "latest" accounts are the newest filed year rather than the first record returned.
+
+### v3 of this entry: fact-level recall, more verified websites, stricter identity
+
+**Fact-level claims** (`facts.py`). Next to the unchanged aggregate claims, every fact is also its own claim
+(`fact_level: true`), each with its own evidence span and `as_of` date:
+
+| Source | Claims (one per fact) |
+|---|---|
+| Roles API | `role` per active role holder (name, role, person/organisation; `as_of` = the role group's last-changed date — the API has no per-role start date) |
+| Sub-units API | `registered_location` per underenhet (name, address, municipality, NACE, employees, start date) |
+| Accounts register | `annual_revenue`, `operating_result`, `annual_result`, `equity`, `total_assets` per filed year, with reporting period; null figures omitted, never 0 |
+| Registry snapshot (or live entity) | `nace_code` (all ranks), `founding_date`, `registration_date`, `share_capital`, `vat_registered`, `register_membership`, `institutional_sector`, `registered_purpose`, `registered_activity`, `auditor_opt_out`, `registry_email`/`registry_phone` (not for sole proprietorships), `parent_entity` |
+| Group structure | `group_relationship` per related entity (relationship label), `group_website` for a site labelled as the group's |
+| Verified site | `external_profile` per profile, `careers_page`, `job_posting`, `site_address`/`site_phone`/`site_email`/`site_logo` (JSON-LD Organization on the site's own domain, own-domain `mailto:`, footer `tel:`) |
+
+**Website candidates** (`domain_guess.discover_website`), after the registry website and Wikidata, cheapest first:
+the registry e-mail domain (generic providers such as gmail.com and online.no skipped), then name variants on `.no`
+(joined, hyphenated, first two tokens, first distinctive token, sub-unit names), then `.com`. DNS is checked first
+(apex, then `www.`); at most 6 candidate fetches per company; the run deadline is checked before each candidate.
+A candidate is probed with its homepage and at most two contact/about/legal pages, and is published only when one of
+those pages prints the exact organisation number, or the full legal name with two registry details in the site's
+own footer/contact block. A name-derived `.com` publishes only on the printed organisation number. Accepted sites
+then get the normal crawl (news, careers, people pages).
+
+**Stricter identity rules** (apply to every site): the organisation number must be a standalone token (no longer a
+substring of all homepage digits run together); a homepage listing other organisation numbers next to this one is a
+multi-entity page and is never published; a site showing the organisation number of the parent or of a group member
+(Brønnøysund konsernstruktur, overordnet enhet) is labelled `group_website` and never published as the company's own.
+
+Measurement on 300 companies (before = v2, after = v3, same batch and snapshot): `submission/recall-300.json`;
+audit of every newly published site: `submission/audit-v3.html`. Tools: `scripts/measure_recall.py`,
+`scripts/audit_websites.py`.

@@ -104,6 +104,20 @@ def build_synthesis(profile: dict[str, Any], claims: list[dict[str, Any]], evide
     say("what_it_does", " ".join(parts) + ".",
         *[claim for claim in (name_claim, form_claim, industry_claim, address_claim) if _value(claim) is not None])
 
+    activity = _first(claims, "registered_activity") or _first(claims, "registered_purpose")
+    if _value(activity):
+        text = str(_value(activity))
+        say("what_it_does", f"Its registered activity: “{text[:220]}{'…' if len(text) > 220 else ''}”.", activity)
+    founded, registered = _first(claims, "founding_date"), _first(claims, "registration_date")
+    if _value(founded):
+        extra = f", registered {_value(registered)}" if _value(registered) else ""
+        say("what_it_does", f"It was founded {_value(founded)}{extra}.", founded, registered if _value(registered) else None)
+    subunits = [claim for claim in claims if claim.get("field") == "registered_location" and claim.get("availability") == "available"]
+    if subunits:
+        places = sorted({str(claim["value"].get("municipality") or "").title() for claim in subunits if claim["value"].get("municipality")})
+        where = f" ({', '.join(places[:4])}{'…' if len(places) > 4 else ''})" if places else ""
+        say("what_it_does", f"It has {len(subunits)} registered sub-unit{'s' if len(subunits) != 1 else ''}{where}.", *subunits[:5])
+
     website_claim = _first(claims, "official_website")
     website_url = _value(website_claim)
     if website_url:

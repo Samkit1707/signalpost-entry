@@ -1,0 +1,110 @@
+{
+  "run_id": "local-v3-1000",
+  "started_at": "2026-10-20T13:16:05.924743Z",
+  "completed_at": "2026-10-20T13:34:44.115833Z",
+  "expected_count": 1000,
+  "emitted_envelopes": 1000,
+  "resumed_profiles": 0,
+  "profiles_fetched_this_run": 1000,
+  "modules": [
+    "registry",
+    "accounting_obligation",
+    "registry_live",
+    "financials",
+    "roles",
+    "group",
+    "locations",
+    "wikidata_footprint",
+    "website",
+    "workforce",
+    "external_profiles",
+    "company_activity",
+    "company_jobs",
+    "dated_news"
+  ],
+  "registry": {
+    "registry_snapshot_sha256": "6f664c1a042cede28001c52659f25e02d9ceb8a3a4b54b20b527300824c26d74",
+    "registry_rows_scanned": 1178744,
+    "requested": 1000,
+    "selected": 996,
+    "absent_from_snapshot": [
+      "922289522",
+      "992289953",
+      "932239043",
+      "917753733"
+    ]
+  },
+  "registry_download": {
+    "source": "cache",
+    "path": "cache/brreg-enheter.csv.gz",
+    "requests": 0,
+    "url": "https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv"
+  },
+  "operations": {
+    "requests": 8269,
+    "bytes": 195002429,
+    "p50_ms": 186,
+    "p95_ms": 4159,
+    "requests_per_company": 8.27,
+    "projected_requests_for_1000": 8270,
+    "runtime_ms": 1084699
+  },
+  "budget": {
+    "max_requests": null,
+    "deadline_minutes": 40.0,
+    "stopped_early": false
+  },
+  "wikidata": {
+    "enabled": true,
+    "status": "ok",
+    "indexed_organisations": 8,
+    "requests": 5,
+    "cached": false,
+    "retrieved_at": "2026-10-20T13:16:34.352396Z",
+    "content_sha256": "eb479b9234de220803e715f990c94fc7cacf8c1021b93d09fb875b828d92085e"
+  },
+  "coverage": {
+    "registry": 996,
+    "accounting_obligation": 996,
+    "registry_live": 1000,
+    "financials": 996,
+    "roles": 996,
+    "group": 66,
+    "locations": 1000,
+    "wikidata_footprint": 7,
+    "website": 117,
+    "workforce": 144,
+    "external_profiles": 36,
+    "company_activity": 32,
+    "company_jobs": 4,
+    "dated_news": 17
+  },
+  "validation": {
+    "passed": true,
+    "checks": {
+      "exact_expected_count": true,
+      "unique_organisation_numbers": true,
+      "all_entity_states_terminal": true,
+      "all_module_states_terminal": true,
+      "zero_silent_drops": true
+    },
+    "invalid_states": []
+  },
+  "site": {
+    "status": "ok",
+    "path": "out/run1000/site/index.html",
+    "run_id": "local-v3-1000",
+    "completed_at": "2026-10-20T13:34:44.115833Z",
+    "companies": 1000,
+    "company_pages": 1000,
+    "with_summary": 1000,
+    "with_verified_website": 60,
+    "with_dated_news": 17,
+    "entry": "index.html",
+    "compare": "compare.html"
+  },
+  "synthesis": {
+    "envelopes_with_summary": 1000,
+    "sentences": 9068
+  }
+}
