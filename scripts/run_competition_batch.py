@@ -35,6 +35,7 @@ from norway_company_agent.enrichment import (  # noqa: E402
     ENRICHMENT_MODULES,
     apply_wikidata_identity_support,
     company_activity_record,
+    quarantine_unowned_site,
     company_jobs_record,
     external_profiles_record,
     wikidata_website_candidate,
@@ -214,6 +215,7 @@ def main() -> None:
                                 "url": (current.get("value") or {}).get("final_url"), "source_type": current.get("source_type"),
                                 "identity_status": ((current.get("value") or {}).get("identity_assessment") or {}).get("status")}
                         profile["evidence"]["website"] = accepted
+                quarantine_unowned_site(profile)
             if "dated_news" in requested_modules:
                 news_record, news_metrics = fetch_dated_news(profile)
                 profile["evidence"]["dated_news"] = news_record

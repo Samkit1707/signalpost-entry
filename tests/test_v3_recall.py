@@ -17,6 +17,7 @@ from norway_company_agent.domain_guess import (  # noqa: E402
 from norway_company_agent.evidence import evidence  # noqa: E402
 from norway_company_agent.facts import live_as_bulk_row, registry_facts  # noqa: E402
 from norway_company_agent.identity import apply_website_identity_gate, assess_website_identity, org_numbers_in  # noqa: E402
+from norway_company_agent.official import normalize_locations, normalize_roles  # noqa: E402
 from norway_company_agent.website import probe_links, site_contact  # noqa: E402
 from test_v2_product import MODULES, account, make_profile  # noqa: E402
 
@@ -44,12 +45,18 @@ def test_every_role_location_year_and_registry_attribute_is_its_own_claim():
                 "registrertIForetaksregisteret": "true", "registrertIFrivillighetsregisteret": "false",
                 "naeringskode2.kode": "71.112", "naeringskode2.beskrivelse": "Rådgivning", "epostadresse": "Post@Firma.no",
                 "telefon": "57 69 89 50", "vedtektsfestetFormaal": "Arkitekttjenester.", "overordnetEnhet": OTHER})
-    profile["evidence"]["roles"]["value"]["roles"] += [{"name": ["REVISOR AS"], "organisation_number": OTHER, "role": "Revisor",
-                                                       "last_changed": "2020-01-01"}, {"name": "Gammel", "role": "Styremedlem", "inactive": True}]
-    profile["evidence"]["locations"] = evidence("locations", "available", "official_subunits", "https://data.brreg.no/u", value={"locations": [
-        {"organisation_number": "973246534", "name": "Avd Bergen", "address": {"adresse": ["Tomtebu 2"], "postnummer": "6893", "poststed": "VIK"},
-         "industry": {"kode": "71.110", "beskrivelse": "Arkitekt"}, "employees": 4, "start_date": "2001-01-01"},
-        {"organisation_number": "973246535", "name": "Avd Oslo", "address": {}, "industry": {}, "employees": None}]})
+    # roles and sub-units as the normalizers build them from the brreg JSON (each with its JSON-path span)
+    profile["evidence"]["roles"]["value"] = normalize_roles({"rollegrupper": [
+        {"type": {"kode": "DAGL"}, "sistEndret": "2019-01-01", "roller": [
+            {"type": {"kode": "DAGL", "beskrivelse": "Daglig leder"}, "person": {"navn": {"fornavn": "Kari", "etternavn": "Nordmann"}}}]},
+        {"type": {"kode": "REVI"}, "sistEndret": "2020-01-01", "roller": [
+            {"type": {"kode": "REVI", "beskrivelse": "Revisor"}, "enhet": {"organisasjonsnummer": OTHER, "navn": ["REVISOR AS"]}},
+            {"type": {"kode": "MEDL", "beskrivelse": "Styremedlem"}, "person": {"navn": {"fornavn": "Gammel"}}, "avregistrert": True}]}]})
+    profile["evidence"]["locations"] = evidence("locations", "available", "official_subunits", "https://data.brreg.no/u", content_sha256="9" * 64,
+                                                value=normalize_locations({"page": {"totalElements": 2}, "_embedded": {"underenheter": [
+        {"organisasjonsnummer": "973246534", "navn": "Avd Bergen", "beliggenhetsadresse": {"adresse": ["Tomtebu 2"], "postnummer": "6893", "poststed": "VIK"},
+         "naeringskode1": {"kode": "71.110", "beskrivelse": "Arkitekt"}, "antallAnsatte": 4, "oppstartsdato": "2001-01-01"},
+        {"organisasjonsnummer": "973246535", "navn": "Avd Oslo"}]}}))
     env = envelope(profile)
     roles = facts(env, "role")
     assert [r["value"]["name"] for r in roles] == ["Kari Nordmann", "REVISOR AS"] and roles[1]["value"]["holder_type"] == "organisation"
@@ -112,14 +119,14 @@ def test_candidate_order_email_then_no_then_com_and_generic_email_skipped():
 def site_record(url: str, footer: str = "", pages: list | None = None, title: str = "Velkommen", text: str = FILLER) -> dict:
     return evidence("website", "available", "name_derived_domain_candidate", url, value={
         "requested_url": url, "final_url": url, "title": title, "description": "", "identity_text_excerpt": footer,
-        "main_text_excerpt": text, "pages": pages or [], "structured_organisations": []})
+        "main_text_excerpt": text, "pages": pages or [], "structured_organisations": [], "content_sha256": "7" * 64}, content_sha256="7" * 64)
 
 
 def test_dns_precheck_fetch_cap_and_org_number_on_contact_page():
     profile = bare("Fjord Bakeri AS", "post@fjordbakst.no")
     fetched = []
 
-    def fetch(url, source_type, probe=False, probe_terms=None):
+    def fetch(url, source_type, probe=False, probe_terms=None, **_):
         fetched.append((url, probe))
         if "fjordbakst" in url:
             page = {"url": url + "kontakt", "category": "identity", "identity_text_excerpt": f"Fjord Bakeri AS · Org.nr {ORG[:3]} {ORG[3:6]} {ORG[6:]}"}
@@ -141,7 +148,7 @@ def test_dns_precheck_fetch_cap_and_org_number_on_contact_page():
 
 
 def test_name_alone_never_publishes_a_candidate():
-    fetch = lambda url, source_type, probe=False, probe_terms=None: (site_record(url, footer="Fjord Bakeri AS", title="Fjord Bakeri AS"),  # noqa: E731
+    fetch = lambda url, source_type, probe=False, probe_terms=None, **_: (site_record(url, footer="Fjord Bakeri AS", title="Fjord Bakeri AS"),  # noqa: E731
                                                                      {"requests": 2, "bytes": 1, "latencies_ms": []})
     accepted, _, _ = discover_website(bare("Fjord Bakeri AS"), fetch, apply_website_identity_gate, resolver=lambda host: True)
     assert accepted is None
@@ -173,7 +180,10 @@ def test_group_site_is_labelled_never_published():
     full["evidence"]["website"] = gated["website"]
     env = envelope(full)
     assert next(c for c in env["claims"] if c["field"] == "official_website")["value"] is None
-    assert next(c for c in env["claims"] if c["field"] == "group_website")["value"]["group_organisation_numbers"] == [OTHER]
+    group_claim = next(c for c in env["claims"] if c["field"] == "group_website")
+    assert group_claim["value"]["group_organisation_numbers"] == [OTHER]
+    proof = next(item for item in env["evidence"] if item["id"] == group_claim["evidence_ids"][0])
+    assert f"org.nr {OTHER}" in proof["claim_span"] and proof["content_sha256"] == "7" * 64  # quoted from the fetched page
 
 
 # --- C: more from each verified site ---------------------------------------------------------------------------------
@@ -188,18 +198,30 @@ def test_probe_links_and_site_contact_extraction():
             {"name": "Webbyrå AS", "url": "https://webbyraa.no/", "telephone": "22 22 22 22"}]
     contact = site_contact("https://firma.no/", soup, orgs)
     assert contact["emails"] == ["post@firma.no"] and contact["phones"] == ["+4751685700"]
-    assert contact["organisations"] == [{"name": "Firma AS", "address": "Strandgata 21, 4307 Sandnes", "telephone": "51 68 57 00",
-                                         "email": None, "logo": "https://firma.no/logo.png"}]
+    keys = ("name", "address", "telephone", "email", "logo")
+    assert [{key: item[key] for key in keys} for item in contact["organisations"]] == [
+        {"name": "Firma AS", "address": "Strandgata 21, 4307 Sandnes", "telephone": "51 68 57 00", "email": None, "logo": "https://firma.no/logo.png"}]
+    # v4: each value keeps the exact attribute / JSON-LD field it was read from
+    assert contact["sources"]["email:post@firma.no"]["raw"] == 'href="mailto:post@firma.no"'
+    assert contact["sources"]["phone:+4751685700"]["raw"] == 'href="tel:+47 51 68 57 00"'
+    assert contact["organisations"][0]["spans"]["telephone"] == 'JSON-LD Organization.telephone="51 68 57 00"'
 
 
 def test_site_contact_and_job_postings_become_fact_claims_only_on_verified_sites():
     profile = make_profile(3, website=True)
     value = profile["evidence"]["website"]["value"]
-    value["site_contact"] = {"organisations": [{"address": "Gate 3, 0150 Oslo", "telephone": "22 33 44 55", "email": None, "logo": None}],
-                             "emails": ["post@testfirma3.no"], "phones": ["22334455"]}
+    site = "https://testfirma3.no/"
+    value["site_contact"] = {"organisations": [{"address": "Gate 3, 0150 Oslo", "telephone": "22 33 44 55", "email": None, "logo": None,
+                                                "page_url": site, "content_sha256": "b" * 64,
+                                                "spans": {"address": 'JSON-LD Organization.address="Gate 3, 0150 Oslo"',
+                                                          "telephone": 'JSON-LD Organization.telephone="22 33 44 55"'}}],
+                             "emails": ["post@testfirma3.no"], "phones": ["22334455"],
+                             "sources": {"email:post@testfirma3.no": {"page_url": site, "content_sha256": "b" * 64, "raw": 'href="mailto:post@testfirma3.no"'},
+                                         "phone:22334455": {"page_url": site, "content_sha256": "b" * 64, "raw": 'href="tel:22334455"'}}}
     profile["evidence"]["company_jobs"] = evidence("company_jobs", "available", "company_site_careers", "https://testfirma3.no/jobb", value={
-        "careers_pages": [{"url": "https://testfirma3.no/jobb", "title": "Jobb"}],
-        "job_postings": [{"title": "Utvikler", "date_posted": "2026-10-01", "source_url": "https://testfirma3.no/jobb"}]})
+        "careers_pages": [{"url": "https://testfirma3.no/jobb", "title": "Jobb", "content_sha256": "8" * 64, "claim_span": "Jobb"}],
+        "job_postings": [{"title": "Utvikler", "date_posted": "2026-10-01", "source_url": "https://testfirma3.no/jobb", "content_sha256": "8" * 64,
+                          "claim_span": 'JSON-LD JobPosting.title="Utvikler"; JobPosting.datePosted="2026-10-01"'}]})
     env = envelope(profile)
     assert [c["value"] for c in facts(env, "site_address")] == ["Gate 3, 0150 Oslo"]
     assert [c["value"] for c in facts(env, "site_email")] == ["post@testfirma3.no"]
@@ -213,7 +235,7 @@ def test_site_contact_and_job_postings_become_fact_claims_only_on_verified_sites
 
 def test_name_derived_com_needs_the_printed_org_number():
     footer = "Fjord Bakeri AS · Strandgata 21 · 4307 Sandnes"
-    fetch = lambda url, source_type, probe=False, probe_terms=None: (  # noqa: E731
+    fetch = lambda url, source_type, probe=False, probe_terms=None, **_: (  # noqa: E731
         site_record(url, footer=footer, title="Fjord Bakeri AS"), {"requests": 2, "bytes": 1, "latencies_ms": []})
     # name + two registry details proves a .no candidate ...
     accepted, _, _ = discover_website(bare("Fjord Bakeri AS"), fetch, apply_website_identity_gate, resolver=lambda host: True)
@@ -222,7 +244,7 @@ def test_name_derived_com_needs_the_printed_org_number():
     accepted, _, trail = discover_website(bare("Fjord Bakeri AS"), fetch, apply_website_identity_gate,
                                           resolver=lambda host: host.endswith(".com"))
     assert accepted is None and any(item["candidate"].endswith(".com") and item["result"] == "available" for item in trail)
-    with_org = lambda url, source_type, probe=False, probe_terms=None: (  # noqa: E731
+    with_org = lambda url, source_type, probe=False, probe_terms=None, **_: (  # noqa: E731
         site_record(url, footer=footer + f" · Org.nr {ORG}", title="Fjord Bakeri AS"), {"requests": 2, "bytes": 1, "latencies_ms": []})
     accepted, _, _ = discover_website(bare("Fjord Bakeri AS"), with_org, apply_website_identity_gate, resolver=lambda host: host.endswith(".com"))
     assert accepted and accepted["source_url"].endswith(".com/")

@@ -13,7 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from norway_company_agent.batch import terminal_envelope  # noqa: E402
+from norway_company_agent.citations import json_span  # noqa: E402
 from norway_company_agent.evidence import evidence  # noqa: E402
+from norway_company_agent.official import FIGURE_PATHS  # noqa: E402
 from norway_company_agent.news import (  # noqa: E402
     MAX_REQUESTS, article_metadata, fetch_dated_news, news_listing_items, parse_date, parse_feed, parse_sitemap,
 )
@@ -30,8 +32,11 @@ def account(year: int, kind: str = "SELSKAP", **figures) -> dict:
     base = {"revenue": 1000.0 * year, "operating_result": 10.0, "profit_before_tax": 9.0, "annual_result": 8.0,
             "assets": 50.0, "equity": 20.0, "debt": 30.0}
     base.update(figures)
+    # as normalize_financials emits them: the JSON path and value of each figure in the accounts response
     return {"record_id": year, "account_type": kind, "currency": "NOK",
-            "period": {"fraDato": f"{year}-01-01", "tilDato": f"{year}-12-31"}, **base}
+            "period": {"fraDato": f"{year}-01-01", "tilDato": f"{year}-12-31"}, **base,
+            "period_span": json_span([("$[0].id", year), ("$[0].regnskapsperiode.tilDato", f"{year}-12-31")]),
+            "figure_spans": {key: json_span([(f"$[0].{'.'.join(FIGURE_PATHS[key])}", value)]) for key, value in base.items() if value is not None}}
 
 
 def make_profile(index: int, *, records: list | None = None, website: bool = False, news: list | None = None,
@@ -43,16 +48,24 @@ def make_profile(index: int, *, records: list | None = None, website: bool = Fal
            "forretningsadresse.postnummer": "0150", "forretningsadresse.poststed": "OSLO"}
     ev = {
         "registry": evidence("registry", "available", "official_registry_bulk", BRREG, value=row, content_sha256="a" * 64),
-        "accounting_obligation": evidence("accounting_obligation", "available", "official_registry_bulk", BRREG, value={"classification": "required"}),
+        "accounting_obligation": evidence("accounting_obligation", "available", "official_registry_bulk", BRREG, content_sha256="a" * 64,
+                                          value={"classification": "required", "claim_span": f'row[organisasjonsnummer={org}].organisasjonsform.kode="AS"'}),
         "registry_live": evidence("registry_live", "available", "official_registry_live", f"https://data.brreg.no/enhetsregisteret/api/enheter/{org}",
+                                  content_sha256="d" * 64,
                                   value={"name": name, "deleted": deleted, "deleted_date": "2026-05-01" if deleted else None,
                                          "bankrupt": False, "liquidating": False}),
-        "financials": evidence("financials", "available" if records is not None else "not_found", "official_annual_accounts",
-                               f"https://data.brreg.no/regnskapsregisteret/regnskap/{org}", value={"records": records or []}),
+        "financials": evidence("financials", "available" if records else "not_found", "official_annual_accounts",
+                               f"https://data.brreg.no/regnskapsregisteret/regnskap/{org}", content_sha256="e" * 64,
+                               value={"records": records} if records else None, note=None if records else "$ = [] (no annual accounts returned)"),
         "roles": evidence("roles", "available", "official_roles", f"https://data.brreg.no/enhetsregisteret/api/enheter/{org}/roller",
-                          value={"roles": [{"name": "Kari Nordmann", "role": "Daglig leder", "role_code": "DAGL"}]}),
-        "group": evidence("group", "not_found", "official_group_structure", "https://data.brreg.no/"),
-        "locations": evidence("locations", "not_found", "official_subunits", "https://data.brreg.no/"),
+                          content_sha256="f" * 64,
+                          value={"roles": [{"name": "Kari Nordmann", "role": "Daglig leder", "role_code": "DAGL",
+                                            "claim_span": '$.rollegrupper[0].roller[0].type.beskrivelse="Daglig leder"; '
+                                                          '$.rollegrupper[0].roller[0].person.navn.fornavn="Kari"; '
+                                                          '$.rollegrupper[0].roller[0].person.navn.etternavn="Nordmann"'}]}),
+        "group": evidence("group", "not_found", "official_group_structure", "https://data.brreg.no/", note="HTTP 404", content_sha256="0" * 64),
+        "locations": evidence("locations", "not_found", "official_subunits", "https://data.brreg.no/", content_sha256="1" * 64,
+                              note="$.page.totalElements=0 (no registered sub-units)"),
         "wikidata_footprint": evidence("wikidata_footprint", "not_found", "wikidata_org_number_match", "https://query.wikidata.org/sparql"),
         "workforce": evidence("workforce", "not_found", "official_registry_bulk", BRREG),
         "external_profiles": evidence("external_profiles", "not_found", "company_owned_profiles", BRREG),
@@ -63,6 +76,7 @@ def make_profile(index: int, *, records: list | None = None, website: bool = Fal
     if website:
         ev["website"] = evidence("website", "available", "registry_linked_company_website", site, content_sha256="b" * 64, value={
             "final_url": site, "title": f"{name} – hjem", "description": "Vi lager programvare for norske bedrifter.",
+            "content_sha256": "b" * 64, "identity_text_excerpt": f"{name} · Org.nr {org[:3]} {org[3:6]} {org[6:]}",
             "identity_assessment": {"status": "exact", "score": 1.0, "publishable": True, "reasons": ["exact organisation number"]},
             "pages": []})
     else:
@@ -70,7 +84,8 @@ def make_profile(index: int, *, records: list | None = None, website: bool = Fal
     if news:
         ev["dated_news"] = evidence("dated_news", "available", "company_site_news", site + "feed/", value={"items": [
             {"title": title, "url": site + f"nyheter/{n}", "published_at": date, "source_kind": "rss", "source_url": site + "feed/",
-             "content_sha256": "c" * 64, "retrieved_at": "2026-10-20T00:00:00Z", "company_match": {"verified_site": site}}
+             "content_sha256": "c" * 64, "retrieved_at": "2026-10-20T00:00:00Z", "company_match": {"verified_site": site},
+             "claim_span": f"<title>{title}</title> <pubDate>{date}</pubDate>"}
             for n, (title, date) in enumerate(news)]})
     else:
         ev["dated_news"] = evidence("dated_news", "not_found", "company_site_news", site if website else BRREG)
@@ -155,9 +170,12 @@ def test_feed_parsing_requires_title_link_and_publication_date():
     assert [item["title"] for item in rss] == ["Ny fabrikk i dag", "Ekstern sak"]  # future and undated items dropped
     assert rss[0]["published_at"] == "2026-09-01"
     atom = parse_feed(ATOM, "https://firma.no/feed.atom", now=NOW)
-    assert atom == [{"title": "Publisert", "url": "https://firma.no/a", "published_at": "2026-07-01"}]  # updated-only skipped
+    assert atom == [{"title": "Publisert", "url": "https://firma.no/a", "published_at": "2026-07-01",  # updated-only skipped
+                     "claim_span": "<title>Publisert</title> <published>2026-07-01T08:00:00Z</published>"}]
     children, news, plain = parse_sitemap(SITEMAP_NEWS, now=NOW)
-    assert news == [{"title": "Sitemap-nyhet", "url": "https://firma.no/nyheter/x", "published_at": "2026-06-01"}]
+    assert news == [{"title": "Sitemap-nyhet", "url": "https://firma.no/nyheter/x", "published_at": "2026-06-01",
+                     "claim_span": "<loc>https://firma.no/nyheter/x</loc> <news:title>Sitemap-nyhet</news:title> "
+                                   "<news:publication_date>2026-06-01</news:publication_date>"}]
     assert plain == [("https://firma.no/nyheter/y", "2026-06-02")] and children == []
     assert parse_date("2099-01-01", now=NOW) is None and parse_date("1990-01-01", now=NOW) is None
 

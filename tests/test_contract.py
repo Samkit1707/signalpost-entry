@@ -82,9 +82,10 @@ def test_review_website_is_ambiguous_without_a_value():
 def test_missing_values_are_never_zero():
     workforce = evidence("workforce", "not_found", "official_registry_bulk", "https://data.brreg.no/x", note="no count")
     jobs = evidence("company_jobs", "available", "company_website_careers", "https://nordlysbakeri.no/", value={
-        "careers_pages": [{"url": "https://nordlysbakeri.no/jobb", "title": "Jobb hos oss", "content_sha256": "c" * 64}],
+        "careers_pages": [{"url": "https://nordlysbakeri.no/jobb", "title": "Jobb hos oss", "content_sha256": "c" * 64,
+                           "claim_span": "Jobb hos oss"}],
         "job_postings": [], "open_postings_found": 0})
-    env = envelope({"registry": registry_record(), "workforce": workforce, "company_jobs": jobs})
+    env = envelope({"registry": registry_record(), "website": website_record(True, 1.0), "workforce": workforce, "company_jobs": jobs})
     employees = claim(env, "registered_employees")
     assert employees["availability"] == "not_available" and employees["value"] is None
     postal = claim(env, "postal_address")
@@ -119,13 +120,15 @@ def test_deleted_company_is_recorded_and_never_active():
     assert live_value["deleted"] is True and live_value["deleted_date"] == "2026-08-24"
     assert normalize_entity({"organisasjonsnummer": ORG, "navn": "X AS", "konkurs": False})["deleted"] is False
 
-    live = evidence("registry_live", "available", "official_registry_live", "https://data.brreg.no/e", value=live_value)
+    live = evidence("registry_live", "available", "official_registry_live", "https://data.brreg.no/e", value=live_value,
+                    content_sha256="d" * 64)
     status = claim(envelope({"registry_live": live}), "registry_status")
     assert status["availability"] == "available"
     assert status["value"] == {"active": False, "deleted": True, "deleted_date": "2026-08-24"}
 
     active = evidence("registry_live", "available", "official_registry_live", "https://data.brreg.no/e",
-                      value=normalize_entity({"organisasjonsnummer": ORG, "konkurs": False, "underAvvikling": False}))
+                      value=normalize_entity({"organisasjonsnummer": ORG, "konkurs": False, "underAvvikling": False}),
+                      content_sha256="d" * 64)
     assert claim(envelope({"registry_live": active}), "registry_status")["value"] == {
         "bankrupt": False, "liquidating": False, "deleted": False, "active": True}
 
@@ -154,7 +157,7 @@ def test_group_tree_lists_parent_and_siblings_but_not_self():
                              {"organisasjonsnummer": ORG, "navn": "NORDLYS BAKERI AS", "grunnlag": "100 %",
                               "knytningsform": {"beskrivelse": "Konsern datter"}, "children": []},
                              {"organisasjonsnummer": "922222222", "navn": "SØSTER AS", "grunnlag": "60%",
-                              "knytningsform": {"beskrivelse": "Konsern datter"}, "children": []}]})
+                              "knytningsform": {"beskrivelse": "Konsern datter"}, "children": []}]}, content_sha256="e" * 64)
     related = claim(envelope({"group": group}), "group_structure")["value"]
     assert [item["organisation_number"] for item in related] == ["911111111", "922222222"]
     assert related[0]["relation"] == "group top parent"

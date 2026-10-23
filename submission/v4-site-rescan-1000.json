@@ -1,0 +1,36 @@
+{
+  "source": "out/run1000/envelopes.jsonl (v3 15974f5, run 2026-10-20)",
+  "rules": "v4 identity (deterministic_name_org_evidence_v5)",
+  "published_by_v3": 60,
+  "no_longer_published": [
+    {
+      "organisation_number": "984195893",
+      "name": "BEDRIFTSHELSETJENESTEN FOREBYGG SKADE AS",
+      "url": "https://www.forebyggskade.no/",
+      "v3_reason": "all normalized legal-name tokens appear together in homepage identity evidence",
+      "v4_reason": "site's own footer/legal text names Forebygg Skade AS and never this company's full name: another company's site, not published",
+      "evidence": {
+        "legal_names": [
+          "Forebygg Skade AS"
+        ],
+        "relationship": "site's footer names another legal entity, not this company"
+      }
+    },
+    {
+      "organisation_number": "829962462",
+      "name": "PERFEKT HAGE AS",
+      "url": "https://perfekthage.no/",
+      "v3_reason": "all normalized legal-name tokens appear together in homepage identity evidence",
+      "v4_reason": "site's own footer/legal text prints organisation number(s) 925353191 and not this one: another entity's site, not published",
+      "evidence": {
+        "organisation_numbers": [
+          "925353191"
+        ],
+        "relationship": "site prints another entity's organisation number, not this company's",
+        "claim_span": "bygger uterom som varer. Perfekt Hus og Hage AS Midtveien 51 0598 Oslo Org.nr. 925 353 191 Tjenester Belegningsstein Støttemur Dre",
+        "page_url": "https://perfekthage.no/",
+        "content_sha256": "190f060a04cd53ccc0e79af12283419538d770508f841feaf03678c9cf776440"
+      }
+    }
+  ]
+}

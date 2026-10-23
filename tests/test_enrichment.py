@@ -33,9 +33,10 @@ def sparql(rows: list[dict]) -> dict:
     def b(value: str) -> dict:
         return {"type": "literal", "value": value}
     bindings = []
-    for row in rows:
-        bindings.append({key: b(value) for key, value in row.items()})
-    return {"results": {"bindings": bindings}, "_meta": {"retrieved_at": "2026-10-08T00:00:00Z", "content_sha256": "a" * 64, "mode": "full"}}
+    for index, row in enumerate(rows):
+        bindings.append({**{key: b(value) for key, value in row.items()}, "_response": 0, "_index": index})
+    return {"results": {"bindings": bindings}, "_meta": {"retrieved_at": "2026-10-08T00:00:00Z", "content_sha256": "a" * 64,
+                                                         "responses": ["a" * 64], "mode": "full"}}
 
 
 def test_wikidata_exact_match_profiles_and_ambiguity():
@@ -82,7 +83,8 @@ def gated_profile() -> dict:
         "pages": [
             {"url": "https://firma.no/", "title": "Firma AS", "content_sha256": "b" * 64},
             {"url": "https://firma.no/nyheter/ny-avtale", "title": "Ny avtale", "category": "news",
-             "declared_dates": ["2026-09-12"], "job_postings": [], "content_sha256": "c" * 64},
+             "declared_dates": ["2026-09-12"], "declared_date_spans": {"2026-09-12": '<time datetime="2026-09-12">'},
+             "job_postings": [], "content_sha256": "c" * 64},
             {"url": "https://firma.no/karriere", "title": "Karriere", "category": "careers",
              "declared_dates": [], "job_postings": [{"title": "Lagermedarbeider", "date_posted": "2026-10-01"}],
              "content_sha256": "d" * 64},
@@ -172,7 +174,8 @@ def test_batch_end_to_end_offline_with_budget(tmp_path, monkeypatch):
             return evidence("website", "not_found", source_type, "https://data.brreg.no/", note="No valid registry website URL"), {"requests": 0, "bytes": 0, "latencies_ms": []}
         return evidence("website", "available", source_type, url, value={
             "final_url": url, "title": "Firma AS", "main_text_excerpt": "Firma AS org.nr 923 609 016 " * 5,
-            "content_sha256": "f" * 64, "pages": [], "social_links": [], "declared_dates": ["2026-10-01"], "job_postings": [],
+            "content_sha256": "f" * 64, "pages": [], "social_links": [], "declared_dates": ["2026-10-01"],
+            "declared_date_spans": {"2026-10-01": '<time datetime="2026-10-01">'}, "job_postings": [],
         }), {"requests": 3, "bytes": 10, "latencies_ms": [5]}
 
     monkeypatch.setattr(runner, "fetch_official_modules", fake_official)

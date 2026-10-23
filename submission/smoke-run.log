@@ -1,7 +1,7 @@
 {
-  "run_id": "smoke-v3-2026-10-20",
-  "started_at": "2026-10-20T13:11:25.057272Z",
-  "completed_at": "2026-10-20T13:15:42.939443Z",
+  "run_id": "smoke-v4",
+  "started_at": "2026-10-23T17:19:34.480319Z",
+  "completed_at": "2026-10-23T17:21:54.116920Z",
   "expected_count": 100,
   "emitted_envelopes": 100,
   "resumed_profiles": 0,
@@ -30,19 +30,18 @@
     "absent_from_snapshot": []
   },
   "registry_download": {
-    "source": "cache",
+    "source": "supplied",
     "path": "cache/brreg-enheter.csv.gz",
-    "requests": 0,
-    "url": "https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv"
+    "requests": 0
   },
   "operations": {
-    "requests": 887,
-    "bytes": 33818856,
-    "p50_ms": 246,
-    "p95_ms": 6065,
-    "requests_per_company": 8.87,
-    "projected_requests_for_1000": 8870,
-    "runtime_ms": 259070
+    "requests": 883,
+    "bytes": 33227501,
+    "p50_ms": 285,
+    "p95_ms": 3567,
+    "requests_per_company": 8.83,
+    "projected_requests_for_1000": 8830,
+    "runtime_ms": 141372
   },
   "budget": {
     "max_requests": null,
@@ -55,7 +54,7 @@
     "indexed_organisations": 1,
     "requests": 0,
     "cached": true,
-    "retrieved_at": "2026-10-20T10:15:50.738746Z",
+    "retrieved_at": "2026-10-23T16:43:59.139706Z",
     "content_sha256": "e4fb8cf085da969b99a4309d7cf12fae7dbfad221e699e7498bb7f72b31edd52"
   },
   "coverage": {
@@ -65,7 +64,7 @@
     "financials": 100,
     "roles": 100,
     "group": 8,
-    "locations": 100,
+    "locations": 74,
     "wikidata_footprint": 1,
     "website": 11,
     "workforce": 10,
@@ -83,13 +82,26 @@
       "all_module_states_terminal": true,
       "zero_silent_drops": true
     },
-    "invalid_states": []
+    "invalid_states": [],
+    "citations": {
+      "published_claims": 3798,
+      "claims_outside_the_six_contract_states": 0,
+      "published_claims_missing_hash": 0,
+      "published_claims_missing_span": 0,
+      "citation_problems": 0,
+      "state_problems": 0,
+      "site_ownership_problems": 0,
+      "examples": {},
+      "passed": true,
+      "withheld_by_check": [],
+      "uncited_withheld": []
+    }
   },
   "site": {
     "status": "ok",
     "path": "out/site/index.html",
-    "run_id": "smoke-v3-2026-10-20",
-    "completed_at": "2026-10-20T13:15:42.939443Z",
+    "run_id": "smoke-v4",
+    "completed_at": "2026-10-23T17:21:54.116920Z",
     "companies": 100,
     "company_pages": 100,
     "with_summary": 100,
@@ -100,6 +112,6 @@
   },
   "synthesis": {
     "envelopes_with_summary": 100,
-    "sentences": 902
+    "sentences": 903
   }
 }

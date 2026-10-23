@@ -58,6 +58,55 @@ def org_numbers_in(text: Any) -> set[str]:
     return found
 
 
+def number_quote(value: dict[str, Any], numbers: Any) -> dict[str, Any] | None:
+    """The exact page text around the first of `numbers` found: {claim_span, page_url, content_sha256}."""
+    sources = [(value.get("final_url"), value.get("content_sha256"), value.get("identity_text_excerpt")),
+               (value.get("final_url"), value.get("content_sha256"), value.get("main_text_excerpt"))]
+    sources += [(page.get("url"), page.get("content_sha256"), page.get(key)) for page in value.get("pages") or []
+                for key in ("identity_text_excerpt", "main_text_excerpt")]
+    for url, sha, text in sources:
+        text = " ".join(str(text or "").split())
+        for number in numbers:
+            match = re.search(r"(?<!\d)" + r"[\s.\u00a0-]?".join([number[0:3], number[3:6], number[6:9]]) + r"(?!\d)", text)
+            if match:
+                return {"claim_span": " ".join(text[max(0, match.start() - 80):match.end() + 40].split()), "page_url": url, "content_sha256": sha}
+    return None
+
+
+LEGAL_FORM_SUFFIX = r"(?:AS|ASA|ANS|DA|SA|BA|NUF|ENK|KS|IKS|SF|AB|ApS|GmbH|Ltd|BRL)"
+_LEGAL_NAME_RE = re.compile(r"((?:[A-ZÆØÅ0-9][\w&'’.\-]*\s+(?:(?:og|&|i|for|av|de|and)\s+)?){1,6})" + LEGAL_FORM_SUFFIX + r"(?![\wÆØÅæøå])")
+
+
+def other_legal_names(own_name: Any, texts: list[Any]) -> list[str]:
+    """Legal-entity names ("Xxx Yyy AS") printed in identity/footer text whose name words differ from this company's."""
+    own = _tokens(own_name)
+    found: list[str] = []
+    for text in texts:
+        for match in _LEGAL_NAME_RE.finditer(" ".join(str(text or "").split())):
+            name = re.sub(r"^(?:\d+\s+)+", "", " ".join(match.group(0).split()))  # "© 2026 Firma AS" -> "Firma AS"
+            words = _tokens(name)
+            if not words or words == own:
+                continue
+            # trailing words equal to our name ("Kontakt Perfekt Hage AS") are ours, with page words before them
+            if len(words) > len(own) and own and words[-len(own):] == own:
+                continue
+            if name not in found:
+                found.append(name)
+    return found
+
+
+def own_name_phrase_present(own_name: Any, texts: list[Any]) -> bool:
+    """This company's full legal name, legal form included ("Perfekt Hage AS"), appears as one phrase on the site."""
+    words = _words(own_name)
+    if not words:
+        return False
+    for text in texts:
+        seen = _words(text)
+        if any(seen[index:index + len(words)] == words for index in range(len(seen) - len(words) + 1)):
+            return True
+    return False
+
+
 def related_org_numbers(profile: dict[str, Any]) -> set[str]:
     """Other entities of the same corporate group (Brønnøysund konsernstruktur) and the registered parent unit."""
     own = str(profile.get("organisation_number") or "")
@@ -314,6 +363,32 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
         group_site = {"organisation_numbers": group_numbers, "relationship": "site shows organisation number(s) of the corporate group / parent"}
         score = min(score, 0.6)
         reasons.append(f"site shows group/parent organisation number(s) {', '.join(group_numbers)}: labelled as group site, not published")
+        group_site.update(number_quote(value, group_numbers) or {})
+    # v4 (stricter): the site's own identity blocks print organisation number(s), none of them this company's: it is
+    # another entity's site (e.g. "Perfekt Hus og Hage AS, org.nr 925 353 191" for PERFEKT HAGE AS), never published.
+    identity_numbers = set()
+    for text in [value.get("identity_text_excerpt"), *[page.get("identity_text_excerpt") for page in value.get("pages", [])]]:
+        identity_numbers |= org_numbers_in(text)
+    other_entity_site = None
+    if identity_numbers and org_digits not in identity_numbers and not group_numbers:
+        foreign = sorted(identity_numbers)
+        other_entity_site = {"organisation_numbers": foreign, "relationship": "site prints another entity's organisation number, not this company's",
+                             **(number_quote(value, foreign) or {})}
+        score = min(score, 0.6)
+        reasons.append(f"site's own footer/legal text prints organisation number(s) {', '.join(foreign[:3])} and not this one: "
+                       "another entity's site, not published")
+    # v4 (stricter): proven by name only, but the site's own footer/legal text names a different legal entity
+    # ("Perfekt Hus og Hage AS" for PERFEKT HAGE AS) and this company's full name never appears as one phrase: the site
+    # is the other company's, never published, even when no organisation number is printed.
+    identity_texts = [value.get("identity_text_excerpt"), *[page.get("identity_text_excerpt") for page in value.get("pages", [])]]
+    if score < 1.0 and not other_entity_site and not group_numbers:
+        foreign_names = other_legal_names(profile.get("name"), identity_texts)
+        if foreign_names and not own_name_phrase_present(profile.get("name"), [*homepage_identity_parts, *identity_texts,
+                                                                                value.get("main_text_excerpt")]):
+            other_entity_site = {"legal_names": foreign_names[:3], "relationship": "site's footer names another legal entity, not this company"}
+            score = min(score, 0.6)
+            reasons.append(f"site's own footer/legal text names {', '.join(foreign_names[:2])} and never this company's full name: "
+                           "another company's site, not published")
     landing = landing_checks(value)
     requires_org_number = landing["cross_domain_redirect"] or landing["deep_path_landing"]
     if requires_org_number and 0.3 < score < 1.0:
@@ -335,7 +410,8 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
         "landing": landing,
         "requires_org_number": requires_org_number,
         "group_site": group_site,
-        "method": "deterministic_name_org_evidence_v4",
+        "other_entity_site": other_entity_site,
+        "method": "deterministic_name_org_evidence_v5",
     }
 
 
@@ -369,6 +445,13 @@ def assess_social_identity(profile: dict[str, Any], link: dict[str, str]) -> dic
     }
 
 
+LINK_KEYS = ("platform", "url", "page_url", "content_sha256", "raw")
+
+
+def link_with_provenance(item: dict[str, Any]) -> dict[str, Any]:
+    return {key: item[key] for key in LINK_KEYS if key in item}
+
+
 def apply_website_identity_gate(profile: dict[str, Any], website: dict[str, Any]) -> dict[str, Any]:
     if website.get("status") != "available":
         return {"website": website, "assessment": None, "quarantined_social_links": 0}
@@ -381,7 +464,7 @@ def apply_website_identity_gate(profile: dict[str, Any], website: dict[str, Any]
     social_assessments = [assess_social_identity(profile, link) for link in original]
     value["social_link_assessments"] = social_assessments
     value["social_links"] = [
-        {"platform": item["platform"], "url": item["url"]}
+        link_with_provenance(item)
         for item in social_assessments
         if assessment["publishable"] and item["publishable"]
     ]

@@ -59,3 +59,12 @@ Each envelope also carries:
 v3 adds fact-level claims (`"fact_level": true`): one claim per role, sub-unit, filed figure per year, registry
 attribute, group relationship, profile, careers page, job posting and site contact detail, each with its own evidence
 entry and `as_of`. Aggregate claims from v1/v2 are unchanged. Field list: README, "v3 of this entry".
+
+v4: every evidence entry has `content_sha256` (hash of the response the value was read from) and a `claim_span` that
+contains the claim's value, plus `span_kind`: `field_path` (CSV column or JSON path and value), `quote` (page text,
+attribute or JSON-LD field), or `absence` (what was checked, for claims without a value). Values that cannot be cited
+are withheld: the aggregate claim becomes `ambiguous` with a `note`; the envelope lists them in `uncited_withheld`.
+Records may carry `checked` (what a not-found check looked at; never a value). A website record for a site that is
+not the company's own carries `quarantined` (counts of dropped items). Claims the
+citation check rejects are withheld in place (`ambiguous`/`not_available`, `value: null`, `note`) and logged in
+`citation_withheld` and in the run report's `validation.citations`. The check never fails a run or drops an envelope.

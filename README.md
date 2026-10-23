@@ -75,7 +75,7 @@ uv run python scripts/run_competition_batch.py \
 uv run --with pytest pytest -q
 ```
 
-The original starter archive was clean-room verified by Builderr on August 24, 2026 (104 tests). This entry has **177 tests and 5 subtests passing offline**, and has been run live on a 100-company smoke batch (`submission/smoke-report.json`) and a 998-company rehearsal.
+The original starter archive was clean-room verified by Builderr on August 24, 2026 (104 tests). This entry has **196 tests and 5 subtests passing offline**, and has been run live on a 100-company smoke batch (`submission/smoke-report.json`) and a 998-company rehearsal.
 
 Increase `--count` and `--expected-count` together for a larger local test. The 100-row smoke test above is practice only; Builderr supplies the companies for every official run.
 
@@ -243,3 +243,51 @@ multi-entity page and is never published; a site showing the organisation number
 Measurement on 300 companies (before = v2, after = v3, same batch and snapshot): `submission/recall-300.json`;
 audit of every newly published site: `submission/audit-v3.html`. Tools: `scripts/measure_recall.py`,
 `scripts/audit_websites.py`.
+
+### v4 of this entry: exact citations, honest states, nothing from sites that are not the company's own
+
+**Citations** (`citations.py`, `contract.py`). Every claim has its own evidence entry. `content_sha256` is the hash
+of the response the value was read from (the bulk CSV download, one registry/API JSON response, one SPARQL response,
+or the one web page the value is on, not the homepage by default). `claim_span` contains the value exactly, and
+`span_kind` says how:
+
+| `span_kind` | Sources | Example |
+|---|---|---|
+| `field_path` | bulk registry CSV, Brønnøysund/Regnskapsregisteret JSON, Wikidata SPARQL JSON | `row[organisasjonsnummer=926765663].navn="PROSPECTUS MANAGEMENT AS"`, `$[0].resultatregnskapResultat.driftsresultat.driftsinntekter.sumDriftsinntekter=2119889.0`, `$.results.bindings[3].linkedin.value="firma-as"` |
+| `quote` | company web pages, feeds, sitemaps | `© 2025 Prospectus Management AS · Org.nr. 926 765 663`, `href="mailto:post@prospectus.no"`, `JSON-LD Organization.telephone="51 68 57 00"`, `<title>…</title> <pubDate>…</pubDate>` |
+| `absence` | claims with no value: what was checked | `row[…].postadresse.adresse=""`, `$.page.totalElements=0 (no registered sub-units)` |
+
+A value that cannot be cited this way is not published. An aggregate claim then becomes `ambiguous` with `value: null`
+and a `note`, and a fact-level claim is left out. Both are listed in the envelope's `uncited_withheld`.
+`accounting_obligation` now cites the bulk-row cells it reads (the rule page itself is not fetched, so it is named in
+`rule_source` and carries no hash).
+
+**Citation check, never a run failure** (`citations.py`, called in `batch.terminal_envelope`). Before the synthesis is
+built, every claim is checked. Problem claims are withheld in place, so the check never fails validation, never changes
+the exit code and never drops an envelope. Problems are: a published claim without a hash or span, a span that does not
+contain the value, a state that disagrees with the value, or a claim from a site that is not the company's own. A
+withheld claim gets `value: null` and state `ambiguous` (a value existed) or `not_available` (none), plus a `note`.
+Records are repaired the same way: a not-found record never carries a value (it moves to `checked`), and an available
+record with nothing in it becomes `not_found`. Every action is logged in the envelope (`citation_withheld`) and in the
+run report (`validation.citations.withheld_by_check`, `uncited_withheld`), next to the audit counts, which are 0 after
+withholding. Only the six contract states can appear; `not_found` maps to `not_available`.
+
+**Honest states.** A 200 answer with nothing in it (no sub-units, no roles, no accounts) is now `not_found`, not
+`complete` with an empty value. A `dated_news` check that found nothing keeps what it checked in `checked`, not in `value`.
+
+**Sites that are not the company's own.** After the identity decision, a fetched site that did not pass it (a group/parent
+site, another entity's site, or an unverified site) keeps only its URL, title, hash, page list and identity verdict.
+Its social links, e-mails, phones, JSON-LD contacts/logos, job postings, news items, feeds and page text are dropped,
+and only counts are kept in `quarantined`. A group site appears only as the labelled `group_website` claim, cited by the
+quoted text that shows the group's organisation number. A new stricter identity rule also applies: a site whose own
+footer/legal text prints organisation numbers, none of them this company's, is another entity's site and is never
+published (e.g. perfekthage.no prints "Perfekt Hus og Hage AS … Org.nr. 925 353 191"; v3 had published it for
+PERFEKT HAGE AS, 829962462, on a name match). Without any organisation number, a site proven only by name is not
+published when its own footer/legal text names a different legal entity ("… AS/ASA/ANS/DA/SA …") and this company's
+full legal name, legal form included, appears nowhere on the site.
+
+Guessed-domain probes use a 5 s socket timeout (registry-listed sites keep 15 s). On the smoke batch, guessed hosts that
+resolve but never answer sat at the 15 s timeout and set p95 at 6–8 s.
+
+Measurement, v3 (15974f5) vs v4 on the same 300 companies and snapshot: `submission/v4-compare-300.json` and
+`submission/recall-300-v4.json` (`scripts/compare_v4.py`, `scripts/measure_recall.py`).

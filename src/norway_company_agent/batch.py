@@ -5,7 +5,9 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
+from .citations import check_envelopes, repair_records, withhold_problem_claims
 from .contract import contract_fields
+from .enrichment import quarantine_unowned_site
 from .evidence import evidence, utc_now
 from .official import accounting_obligation_assessment
 from .sampling import iter_bulk
@@ -110,7 +112,7 @@ def profiles_from_bulk(path: str | Path, organisation_numbers: Iterable[str]) ->
                 content_sha256=snapshot_sha256,
                 source_row_key=org,
             ),
-            "accounting_obligation": accounting_obligation_assessment(profile),
+            "accounting_obligation": accounting_obligation_assessment(profile, raw=raw, snapshot_sha256=snapshot_sha256, retrieved_at=retrieved_at),
         }
         found[org] = profile
         if len(found) == len(wanted):
@@ -157,6 +159,8 @@ def terminal_envelope(
     started_at: str,
     completed_at: str,
 ) -> dict[str, Any]:
+    quarantine_unowned_site(profile)  # nothing from a site that is not this company's own stays attached
+    repaired = repair_records(profile)  # no record carries a value under a not-found state, none is available and empty
     module_states = {}
     for module in modules:
         record = profile.get("evidence", {}).get(module)
@@ -166,6 +170,11 @@ def terminal_envelope(
             "final_timestamp": (record or {}).get("retrieved_at") or completed_at,
         }
     contract = contract_fields(profile, module_states)
+    # The citation check never sinks a run: a claim it rejects is withheld in place (before the synthesis can quote it).
+    withheld = withhold_problem_claims({"organisation_number": profile["organisation_number"], "profile": profile, **contract})
+    contract["citation_withheld"] = withheld + [{"organisation_number": profile["organisation_number"], "field": item["module"],
+                                                 "kind": "record", "problem": item["problem"], "new_state": item["action"]}
+                                                for item in repaired]
     entity_state = "submission_error" if any(item["state"] == "submission_error" for item in module_states.values()) else "complete"
     return {
         "run_id": run_id,
@@ -195,7 +204,13 @@ def validate_envelopes(envelopes: list[dict[str, Any]], expected_count: int) -> 
         "all_module_states_terminal": not invalid_states,
         "zero_silent_drops": len(envelopes) == expected_count and len(orgs) == len(set(orgs)),
     }
-    return {"passed": all(checks.values()), "checks": checks, "invalid_states": invalid_states}
+    # v4: the citation audit is reported, never a reason to fail the run. Problem claims were already withheld in
+    # terminal_envelope, so after withholding these counts are expected to be 0; the withheld log is in the report.
+    citations = check_envelopes(envelopes)
+    citations["withheld_by_check"] = [item for envelope in envelopes for item in envelope.get("citation_withheld") or []]
+    citations["uncited_withheld"] = [{"organisation_number": envelope.get("organisation_number"), **item}
+                                     for envelope in envelopes for item in envelope.get("uncited_withheld") or []]
+    return {"passed": all(checks.values()), "checks": checks, "invalid_states": invalid_states, "citations": citations}
 
 
 def profile_complete_for_modules(profile: dict[str, Any], modules: Iterable[str]) -> bool:

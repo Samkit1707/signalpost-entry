@@ -19,3 +19,8 @@
 - Role start dates are not in the Brønnøysund roles API; `role` claims carry the role group's last-changed date.
 - Group detection uses Norwegian group structure only: a foreign parent's site is caught by the `.com`
   org-number rule, not labelled as a group site.
+- v4 quotes page text as extracted (visible text, whitespace collapsed) or as the raw attribute; it is not a byte
+  offset into the HTML. Bulk-CSV spans name the row and column, not a byte range in the 150 MB file.
+- A site whose footer prints any organisation number other than this company's (for example a web agency's, with no
+  number of its own) is not published (precision over recall).
+- `accounting_obligation` is a rule classification; its evidence is the registry cells it reads, not the rule page.

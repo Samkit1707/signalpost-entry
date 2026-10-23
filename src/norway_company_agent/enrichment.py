@@ -10,6 +10,7 @@ import urllib.parse
 from typing import Any
 
 from .evidence import evidence
+from .identity import link_with_provenance
 from .website import normalize_social_url
 
 ENRICHMENT_MODULES = ("workforce", "external_profiles", "company_activity", "company_jobs")
@@ -22,6 +23,42 @@ def _website(profile: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], b
     identity = value.get("identity_assessment") or {}
     publishable = website.get("status") == "available" and bool(identity.get("publishable"))
     return website, value, publishable
+
+
+# What a website record keeps when the site is not this company's own (group/parent site, another entity, unverified).
+KEPT_FROM_UNOWNED_SITE = ("requested_url", "final_url", "registered_domain", "title", "content_sha256", "identity_assessment",
+                          "extraction_state", "crawl_errors")
+
+
+def quarantine_unowned_site(profile: dict[str, Any]) -> dict[str, int] | None:
+    """Drop everything read from a fetched site that did not pass the identity gate, so none of its social profiles,
+    news, jobs, contact details or logo can be attached to this company. A group/parent site stays only as the
+    labelled `group_website` relationship (URL, group organisation numbers, quoted proof). Idempotent."""
+    website = (profile.get("evidence") or {}).get("website") or {}
+    value = website.get("value")
+    if website.get("status") != "available" or not isinstance(value, dict):
+        return None
+    if (value.get("identity_assessment") or {}).get("publishable"):
+        return None
+    if value.get("quarantined") is not None:
+        return value["quarantined"]
+    contact = value.get("site_contact") or {}
+    pages = value.get("pages") or []
+    removed = {
+        "social_links": len({item.get("url") for item in (value.get("discovered_social_links") or []) + (value.get("social_links") or [])}),
+        "emails": len(set(contact.get("emails") or []) | {email for page in pages for email in (page.get("site_contact") or {}).get("emails") or []}),
+        "phones": len(set(contact.get("phones") or []) | {phone for page in pages for phone in (page.get("site_contact") or {}).get("phones") or []}),
+        "jsonld_contacts_and_logos": len(contact.get("organisations") or []),
+        "job_postings": len(value.get("job_postings") or []) + sum(len(page.get("job_postings") or []) for page in pages),
+        "news_items": len(value.get("news_items") or []) + sum(len(page.get("news_items") or []) for page in pages),
+        "feeds": len(value.get("feed_links") or []),
+    }
+    kept = {key: value[key] for key in KEPT_FROM_UNOWNED_SITE if key in value}
+    kept["pages"] = [{key: page.get(key) for key in ("url", "title", "content_sha256", "category")} for page in pages]
+    kept["social_links"] = []
+    kept["quarantined"] = removed
+    website["value"] = kept
+    return removed
 
 
 def workforce_record(profile: dict[str, Any]) -> dict[str, Any]:
@@ -66,9 +103,10 @@ def external_profiles_record(profile: dict[str, Any], wikidata: dict[str, Any] |
                 "sources": [], "identity_proof": [],
             })
             item = merged[_profile_key(url)]
-            item["sources"].append({"source_url": value.get("final_url") or website.get("source_url"),
-                                    "content_sha256": value.get("content_sha256"),
+            item["sources"].append({"source_url": link.get("page_url") or value.get("final_url") or website.get("source_url"),
+                                    "content_sha256": link.get("content_sha256") if link.get("page_url") else value.get("content_sha256"),
                                     "retrieved_at": website.get("retrieved_at"),
+                                    "claim_span": link.get("raw"),
                                     "method": "linked_from_identity_gated_company_site"})
             item["identity_proof"].append("linked from verified company website")
     wiki_value = (wikidata or {}).get("value") if (wikidata or {}).get("status") == "available" else None
@@ -78,17 +116,19 @@ def external_profiles_record(profile: dict[str, Any], wikidata: dict[str, Any] |
             key = _profile_key(normalized["url"])
             item = merged.setdefault(key, {"platform": link["platform"], "url": normalized["url"],
                                            "sources": [], "identity_proof": []})
-            item["sources"].append({"source_url": wiki_value["wikidata_item"],
-                                    "content_sha256": wikidata.get("content_sha256"),
+            item["sources"].append({"source_url": wikidata.get("source_url") or wiki_value["wikidata_item"],
+                                    "content_sha256": link.get("content_sha256") or wikidata.get("content_sha256"),
                                     "retrieved_at": wikidata.get("retrieved_at"),
+                                    "claim_span": link.get("claim_span"),
                                     "method": "wikidata_exact_org_number_match"})
             item["identity_proof"].append(wiki_value["identity_proof"])
         for page in wiki_value.get("wikipedia") or []:
             item = merged.setdefault(_profile_key(page), {"platform": "wikipedia", "url": page,
                                                           "sources": [], "identity_proof": []})
-            item["sources"].append({"source_url": wiki_value["wikidata_item"],
-                                    "content_sha256": wikidata.get("content_sha256"),
+            item["sources"].append({"source_url": wikidata.get("source_url") or wiki_value["wikidata_item"],
+                                    "content_sha256": (wiki_value.get("sitelink_sources") or {}).get(page, {}).get("content_sha256") or wikidata.get("content_sha256"),
                                     "retrieved_at": wikidata.get("retrieved_at"),
+                                    "claim_span": (wiki_value.get("sitelink_sources") or {}).get(page, {}).get("claim_span"),
                                     "method": "wikidata_sitelink"})
             item["identity_proof"].append(wiki_value["identity_proof"])
     profiles = sorted(merged.values(), key=lambda item: (str(item["platform"]), item["url"]))
@@ -124,12 +164,17 @@ def company_activity_record(profile: dict[str, Any]) -> dict[str, Any]:
             "declared_dates": dates,
             "latest_declared_date": dates[0] if dates else None,
             "content_sha256": page.get("content_sha256"),
+            # the declared date as written, or (undated news page) the page's own title
+            "claim_span": (page.get("declared_date_spans") or {}).get(dates[0]) if dates
+            else " ".join(str(page.get("title") or "").split()) or None,
         })
     homepage_dates = value.get("declared_dates") or []
     if homepage_dates and not any(item["url"] == value.get("final_url") for item in items):
         items.append({"url": value.get("final_url"), "title": value.get("title"), "page_type": "homepage",
                       "declared_dates": homepage_dates, "latest_declared_date": homepage_dates[0],
-                      "content_sha256": value.get("content_sha256")})
+                      "content_sha256": value.get("content_sha256"),
+                      "claim_span": (value.get("declared_date_spans") or {}).get(homepage_dates[0])})
+    items = [item for item in items if item["claim_span"] and item["content_sha256"]]  # cited exactly or not at all
     if not items:
         return evidence("company_activity", "not_found", "company_site_activity", value.get("final_url") or website.get("source_url"),
                         note="Verified site crawled; no news page or declared publication date found",
@@ -152,8 +197,10 @@ def company_jobs_record(profile: dict[str, Any]) -> dict[str, Any]:
     postings = []
     for page in [{"url": value.get("final_url"), "title": value.get("title"), "content_sha256": value.get("content_sha256"),
                   "job_postings": value.get("job_postings") or [], "category": None}] + list(value.get("pages") or []):
-        if page.get("category") == "careers":
-            careers_pages.append({"url": page.get("url"), "title": page.get("title"), "content_sha256": page.get("content_sha256")})
+        if page.get("category") == "careers" and page.get("content_sha256"):
+            # The careers page itself is the evidence: its title as fetched (or its URL when it has no title).
+            careers_pages.append({"url": page.get("url"), "title": page.get("title"), "content_sha256": page.get("content_sha256"),
+                                  "claim_span": " ".join(str(page.get("title") or "").split()) or page.get("url")})
         for job in page.get("job_postings") or []:
             postings.append({**job, "source_url": page.get("url"), "content_sha256": page.get("content_sha256")})
     if not careers_pages and not postings:
@@ -199,4 +246,4 @@ def apply_wikidata_identity_support(profile: dict[str, Any], wikidata: dict[str,
         identity.setdefault("promotion_proof", []).append(
             {"type": "wikidata_official_website", "item": (wikidata.get("value") or {}).get("wikidata_item")})
         assessments = value.get("social_link_assessments") or []
-        value["social_links"] = [{"platform": item["platform"], "url": item["url"]} for item in assessments if item.get("publishable")]
+        value["social_links"] = [link_with_provenance(item) for item in assessments if item.get("publishable")]

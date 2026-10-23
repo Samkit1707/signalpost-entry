@@ -160,6 +160,9 @@ def website_candidates(profile: dict[str, Any], tried: set[str] | None = None) -
     return ordered
 
 
+PROBE_TIMEOUT = 5.0  # seconds per socket operation for a guessed-domain probe (registry-listed sites keep 15 s)
+
+
 def discover_website(profile: dict[str, Any], fetch, gate, *, resolver=resolves, tried: set[str] | None = None,
                      keep_going=lambda: True, max_fetches: int = MAX_CANDIDATE_FETCHES) -> tuple[dict[str, Any] | None, dict[str, Any], list[dict[str, Any]]]:
     """Probe candidates in order; publish only the exact org number on the homepage/contact/about/legal page (single
@@ -192,8 +195,10 @@ def discover_website(profile: dict[str, Any], fetch, gate, *, resolver=resolves,
         fetches += 1
         source_type = "registry_email_domain_candidate" if method == "registry_email_domain" else "name_derived_domain_candidate"
         # https only: an http:// fallback recovered fetches on the 300 sample but proved no site and doubled p95.
+        # A guessed host that resolves but does not answer within PROBE_TIMEOUT is not worth the run's p95
+        # (on the smoke batch such hosts sat at the 15 s socket timeout and set p95 at 6-8 s).
         record, fetched = fetch("https://" + host + "/", source_type=source_type, probe=True,
-                                probe_terms=None if method == "registry_email_domain" else terms)
+                                probe_terms=None if method == "registry_email_domain" else terms, timeout=PROBE_TIMEOUT)
         spend(fetched)
         gated = gate(profile, record)
         assessment = gated.get("assessment") or {}

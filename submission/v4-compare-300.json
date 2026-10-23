@@ -1,0 +1,614 @@
+{
+  "before": {
+    "published_claims": 11358,
+    "claims_outside_the_six_contract_states": 0,
+    "published_claims_missing_hash": 3,
+    "published_claims_missing_span": 0,
+    "citation_problems": 5045,
+    "state_problems": 95,
+    "site_ownership_problems": 9,
+    "examples": {
+      "citation": [
+        {
+          "organisation_number": "998781310",
+          "field": "industry",
+          "problem": "span_does_not_contain_value",
+          "evidence_ids": [
+            "ev-registry-1"
+          ],
+          "claim_index": 2
+        },
+        {
+          "organisation_number": "998781310",
+          "field": "business_address",
+          "problem": "span_does_not_contain_value",
+          "evidence_ids": [
+            "ev-registry-1"
+          ],
+          "claim_index": 3
+        },
+        {
+          "organisation_number": "998781310",
+          "field": "postal_address",
+          "problem": "span_does_not_contain_value",
+          "evidence_ids": [
+            "ev-registry-1"
+          ],
+          "claim_index": 4
+        },
+        {
+          "organisation_number": "998781310",
+          "field": "latest_annual_accounts",
+          "problem": "span_does_not_contain_value",
+          "evidence_ids": [
+            "ev-financials-1"
+          ],
+          "claim_index": 7
+        },
+        {
+          "organisation_number": "998781310",
+          "field": "group_structure",
+          "problem": "missing_span",
+          "evidence_id": "ev-group-1",
+          "published": false,
+          "claim_index": 9
+        },
+        {
+          "organisation_number": "998781310",
+          "field": "registered_locations",
+          "problem": "missing_span",
+          "evidence_id": "ev-locations-1",
+          "published": false,
+          "claim_index": 10
+        },
+        {
+          "organisation_number": "998781310",
+          "field": "wikidata_item",
+          "problem": "missing_span",
+          "evidence_id": "ev-wikidata_footprint-1",
+          "published": false,
+          "claim_index": 11
+        },
+        {
+          "organisation_number": "998781310",
+          "field": "official_website",
+          "problem": "missing_hash",
+          "evidence_id": "ev-website-1",
+          "published": false,
+          "claim_index": 12
+        },
+        {
+          "organisation_number": "998781310",
+          "field": "official_website",
+          "problem": "missing_span",
+          "evidence_id": "ev-website-1",
+          "published": false,
+          "claim_index": 12
+        },
+        {
+          "organisation_number": "998781310",
+          "field": "registered_employees",
+          "problem": "missing_span",
+          "evidence_id": "ev-workforce-1",
+          "published": false,
+          "claim_index": 13
+        }
+      ],
+      "state": [
+        {
+          "organisation_number": "998781310",
+          "field": "locations",
+          "problem": "record_available_but_empty"
+        },
+        {
+          "organisation_number": "996223329",
+          "field": "locations",
+          "problem": "record_available_but_empty"
+        },
+        {
+          "organisation_number": "926765663",
+          "field": "dated_news",
+          "problem": "record_not_found_with_value"
+        },
+        {
+          "organisation_number": "921045158",
+          "field": "locations",
+          "problem": "record_available_but_empty"
+        },
+        {
+          "organisation_number": "912238180",
+          "field": "locations",
+          "problem": "record_available_but_empty"
+        },
+        {
+          "organisation_number": "830391762",
+          "field": "locations",
+          "problem": "record_available_but_empty"
+        },
+        {
+          "organisation_number": "912875814",
+          "field": "locations",
+          "problem": "record_available_but_empty"
+        },
+        {
+          "organisation_number": "951110345",
+          "field": "dated_news",
+          "problem": "record_not_found_with_value"
+        },
+        {
+          "organisation_number": "989116886",
+          "field": "locations",
+          "problem": "record_available_but_empty"
+        },
+        {
+          "organisation_number": "914616042",
+          "field": "locations",
+          "problem": "record_available_but_empty"
+        }
+      ],
+      "site_ownership": [
+        {
+          "organisation_number": "936229069",
+          "field": "website",
+          "problem": "content_kept_from_site_that_is_not_the_companys_own",
+          "keys": [
+            "site_contact",
+            "main_text_excerpt",
+            "pages[0].main_text_excerpt"
+          ]
+        },
+        {
+          "organisation_number": "995879107",
+          "field": "website",
+          "problem": "content_kept_from_site_that_is_not_the_companys_own",
+          "keys": [
+            "site_contact",
+            "main_text_excerpt",
+            "pages[0].main_text_excerpt",
+            "pages[1].site_contact",
+            "pages[1].main_text_excerpt"
+          ]
+        },
+        {
+          "organisation_number": "989593714",
+          "field": "website",
+          "problem": "content_kept_from_site_that_is_not_the_companys_own",
+          "keys": [
+            "discovered_social_links",
+            "social_link_assessments",
+            "site_contact",
+            "structured_organisations",
+            "feed_links",
+            "declared_dates",
+            "main_text_excerpt",
+            "pages[0].main_text_excerpt",
+            "pages[1].site_contact",
+            "pages[1].main_text_excerpt",
+            "pages[3].main_text_excerpt",
+            "pages[4].main_text_excerpt"
+          ]
+        },
+        {
+          "organisation_number": "917635897",
+          "field": "website",
+          "problem": "content_kept_from_site_that_is_not_the_companys_own",
+          "keys": [
+            "site_contact",
+            "main_text_excerpt",
+            "pages[0].main_text_excerpt"
+          ]
+        },
+        {
+          "organisation_number": "892176132",
+          "field": "website",
+          "problem": "content_kept_from_site_that_is_not_the_companys_own",
+          "keys": [
+            "discovered_social_links",
+            "social_link_assessments",
+            "site_contact",
+            "feed_links",
+            "main_text_excerpt",
+            "pages[0].main_text_excerpt",
+            "pages[1].site_contact",
+            "pages[2].main_text_excerpt",
+            "pages[3].main_text_excerpt"
+          ]
+        },
+        {
+          "organisation_number": "999012779",
+          "field": "website",
+          "problem": "content_kept_from_site_that_is_not_the_companys_own",
+          "keys": [
+            "discovered_social_links",
+            "social_link_assessments",
+            "site_contact",
+            "feed_links",
+            "pages[1].site_contact"
+          ]
+        },
+        {
+          "organisation_number": "989221809",
+          "field": "website",
+          "problem": "content_kept_from_site_that_is_not_the_companys_own",
+          "keys": [
+            "site_contact"
+          ]
+        },
+        {
+          "organisation_number": "990367612",
+          "field": "website",
+          "problem": "content_kept_from_site_that_is_not_the_companys_own",
+          "keys": [
+            "discovered_social_links",
+            "social_link_assessments",
+            "site_contact",
+            "main_text_excerpt",
+            "pages[0].main_text_excerpt",
+            "pages[1].site_contact",
+            "pages[1].main_text_excerpt"
+          ]
+        },
+        {
+          "organisation_number": "930183288",
+          "field": "website",
+          "problem": "content_kept_from_site_that_is_not_the_companys_own",
+          "keys": [
+            "discovered_social_links",
+            "social_link_assessments",
+            "site_contact",
+            "declared_dates",
+            "main_text_excerpt",
+            "pages[0].main_text_excerpt",
+            "pages[1].site_contact",
+            "pages[1].main_text_excerpt",
+            "pages[2].main_text_excerpt"
+          ]
+        }
+      ]
+    },
+    "passed": false,
+    "problem_counts": {
+      "citation:span_does_not_contain_value:industry": 300,
+      "citation:span_does_not_contain_value:business_address": 299,
+      "citation:span_does_not_contain_value:latest_annual_accounts": 299,
+      "citation:missing_span:wikidata_item": 299,
+      "citation:missing_hash:company_jobs": 297,
+      "citation:missing_span:company_jobs": 297,
+      "citation:missing_hash:dated_news": 294,
+      "citation:missing_span:dated_news": 294,
+      "citation:missing_hash:company_activity": 290,
+      "citation:missing_span:company_activity": 290,
+      "citation:missing_hash:external_profiles": 288,
+      "citation:missing_span:external_profiles": 288,
+      "citation:missing_span:group_structure": 282,
+      "citation:missing_hash:official_website": 268,
+      "citation:missing_span:official_website": 268,
+      "citation:missing_span:registered_employees": 257,
+      "citation:span_does_not_contain_value:registered_locations": 222,
+      "citation:missing_span:registered_locations": 78,
+      "state:record_available_but_empty:locations": 78,
+      "citation:span_does_not_contain_value:postal_address": 69,
+      "citation:span_does_not_contain_value:roles": 41,
+      "state:record_not_found_with_value:dated_news": 17,
+      "citation:span_does_not_contain_value:legal_form": 13,
+      "site_ownership:content_kept_from_site_that_is_not_the_companys_own:website": 9,
+      "citation:span_does_not_contain_value:group_structure": 4,
+      "citation:missing_hash:careers_page": 3,
+      "citation:missing_span:roles": 1,
+      "citation:missing_hash:latest_annual_accounts": 1,
+      "citation:missing_span:latest_annual_accounts": 1,
+      "citation:span_does_not_contain_value:wikidata_item": 1,
+      "citation:span_does_not_contain_value:careers_page": 1
+    },
+    "uncited_withheld": 0
+  },
+  "after": {
+    "published_claims": 11358,
+    "claims_outside_the_six_contract_states": 0,
+    "published_claims_missing_hash": 0,
+    "published_claims_missing_span": 0,
+    "citation_problems": 0,
+    "state_problems": 0,
+    "site_ownership_problems": 0,
+    "examples": {},
+    "passed": true,
+    "problem_counts": {},
+    "uncited_withheld": 0
+  },
+  "site_ownership_changes": [
+    {
+      "organisation_number": "989593714",
+      "name": "ECCERA NORDIC HOLDING AS",
+      "site_v3": "https://eccera.com/",
+      "owned_v3": false,
+      "site_v4": "https://eccera.com/",
+      "owned_v4": false,
+      "v4_label": "unverified",
+      "v4_reason": "partial legal-name overlap only",
+      "v3_unowned_site_content_in_envelope": {
+        "social_links": 3,
+        "emails": 5,
+        "phones": 1,
+        "jsonld_contacts_and_logos": 1
+      },
+      "v4_unowned_site_content_in_envelope": {},
+      "v3_published_site_claims": 0,
+      "v4_published_site_claims": 0,
+      "v3_group_website": [],
+      "v4_group_website": []
+    },
+    {
+      "organisation_number": "892176132",
+      "name": "PERMIAN AS",
+      "site_v3": "https://www.permian.no/",
+      "owned_v3": false,
+      "site_v4": "https://www.permian.no/",
+      "owned_v4": false,
+      "v4_label": "unverified",
+      "v4_reason": "single legal-name token matches, but no registry postcode, address or phone appears in the site's own footer/contact block",
+      "v3_unowned_site_content_in_envelope": {
+        "social_links": 2,
+        "emails": 1
+      },
+      "v4_unowned_site_content_in_envelope": {},
+      "v3_published_site_claims": 0,
+      "v4_published_site_claims": 0,
+      "v3_group_website": [],
+      "v4_group_website": []
+    },
+    {
+      "organisation_number": "999012779",
+      "name": "EFACTORY AS",
+      "site_v3": "https://efactory.no/",
+      "owned_v3": false,
+      "site_v4": "https://efactory.no/",
+      "owned_v4": false,
+      "v4_label": "unverified",
+      "v4_reason": "registry-linked URL lacks strong exact-entity identity evidence",
+      "v3_unowned_site_content_in_envelope": {
+        "social_links": 1,
+        "emails": 1
+      },
+      "v4_unowned_site_content_in_envelope": {},
+      "v3_published_site_claims": 0,
+      "v4_published_site_claims": 0,
+      "v3_group_website": [],
+      "v4_group_website": []
+    },
+    {
+      "organisation_number": "990367612",
+      "name": "SÅSTADBRÅTEN BORETTSLAG",
+      "site_v3": "https://www.vbbl.no/",
+      "owned_v3": false,
+      "site_v4": "https://www.vbbl.no/",
+      "owned_v4": false,
+      "v4_label": "unverified",
+      "v4_reason": "registry-linked URL lacks strong exact-entity identity evidence",
+      "v3_unowned_site_content_in_envelope": {
+        "social_links": 1,
+        "emails": 5,
+        "phones": 3
+      },
+      "v4_unowned_site_content_in_envelope": {},
+      "v3_published_site_claims": 0,
+      "v4_published_site_claims": 0,
+      "v3_group_website": [],
+      "v4_group_website": []
+    },
+    {
+      "organisation_number": "930183288",
+      "name": "BORETTSLAGET DALSBERGSTIEN 22 A",
+      "site_v3": "https://www.solibo.no/",
+      "owned_v3": false,
+      "site_v4": "https://www.solibo.no/",
+      "owned_v4": false,
+      "v4_label": "other_entity_site",
+      "v4_reason": "site's own footer/legal text prints organisation number(s) 920800572 and not this one: another entity's site, not published",
+      "v3_unowned_site_content_in_envelope": {
+        "social_links": 2,
+        "emails": 1
+      },
+      "v4_unowned_site_content_in_envelope": {},
+      "v3_published_site_claims": 0,
+      "v4_published_site_claims": 0,
+      "v3_group_website": [],
+      "v4_group_website": []
+    }
+  ],
+  "unowned_site_items_removed": {
+    "social_links": 9,
+    "emails": 13,
+    "phones": 4,
+    "jsonld_contacts_and_logos": 1
+  },
+  "recall": {
+    "registry_identity": {
+      "before": {
+        "companies_covered": 300,
+        "claims": 4733,
+        "facts": 4733
+      },
+      "after": {
+        "companies_covered": 300,
+        "claims": 4733,
+        "facts": 4733
+      },
+      "pct_change": {
+        "companies_covered": 0.0,
+        "facts": 0.0
+      },
+      "withheld_uncitable": 0
+    },
+    "contact": {
+      "before": {
+        "companies_covered": 110,
+        "claims": 212,
+        "facts": 212
+      },
+      "after": {
+        "companies_covered": 110,
+        "claims": 212,
+        "facts": 212
+      },
+      "pct_change": {
+        "companies_covered": 0.0,
+        "facts": 0.0
+      },
+      "withheld_uncitable": 0
+    },
+    "people_roles": {
+      "before": {
+        "companies_covered": 299,
+        "claims": 1438,
+        "facts": 1139
+      },
+      "after": {
+        "companies_covered": 299,
+        "claims": 1438,
+        "facts": 1139
+      },
+      "pct_change": {
+        "companies_covered": 0.0,
+        "facts": 0.0
+      },
+      "withheld_uncitable": 0
+    },
+    "locations": {
+      "before": {
+        "companies_covered": 222,
+        "claims": 447,
+        "facts": 225
+      },
+      "after": {
+        "companies_covered": 222,
+        "claims": 447,
+        "facts": 225
+      },
+      "pct_change": {
+        "companies_covered": 0.0,
+        "facts": 0.0
+      },
+      "withheld_uncitable": 0
+    },
+    "financials": {
+      "before": {
+        "companies_covered": 299,
+        "claims": 4267,
+        "facts": 3968
+      },
+      "after": {
+        "companies_covered": 299,
+        "claims": 4267,
+        "facts": 3968
+      },
+      "pct_change": {
+        "companies_covered": 0.0,
+        "facts": 0.0
+      },
+      "withheld_uncitable": 0
+    },
+    "workforce": {
+      "before": {
+        "companies_covered": 43,
+        "claims": 43,
+        "facts": 43
+      },
+      "after": {
+        "companies_covered": 43,
+        "claims": 43,
+        "facts": 43
+      },
+      "pct_change": {
+        "companies_covered": 0.0,
+        "facts": 0.0
+      },
+      "withheld_uncitable": 0
+    },
+    "group": {
+      "before": {
+        "companies_covered": 18,
+        "claims": 99,
+        "facts": 81
+      },
+      "after": {
+        "companies_covered": 18,
+        "claims": 99,
+        "facts": 81
+      },
+      "pct_change": {
+        "companies_covered": 0.0,
+        "facts": 0.0
+      },
+      "withheld_uncitable": 0
+    },
+    "website": {
+      "before": {
+        "companies_covered": 23,
+        "claims": 23,
+        "facts": 23
+      },
+      "after": {
+        "companies_covered": 23,
+        "claims": 23,
+        "facts": 23
+      },
+      "pct_change": {
+        "companies_covered": 0.0,
+        "facts": 0.0
+      },
+      "withheld_uncitable": 0
+    },
+    "external_profiles": {
+      "before": {
+        "companies_covered": 12,
+        "claims": 41,
+        "facts": 29
+      },
+      "after": {
+        "companies_covered": 12,
+        "claims": 41,
+        "facts": 29
+      },
+      "pct_change": {
+        "companies_covered": 0.0,
+        "facts": 0.0
+      },
+      "withheld_uncitable": 0
+    },
+    "jobs": {
+      "before": {
+        "companies_covered": 3,
+        "claims": 6,
+        "facts": 3
+      },
+      "after": {
+        "companies_covered": 3,
+        "claims": 6,
+        "facts": 3
+      },
+      "pct_change": {
+        "companies_covered": 0.0,
+        "facts": 0.0
+      },
+      "withheld_uncitable": 0
+    },
+    "news_activity": {
+      "before": {
+        "companies_covered": 12,
+        "claims": 49,
+        "facts": 60
+      },
+      "after": {
+        "companies_covered": 12,
+        "claims": 49,
+        "facts": 60
+      },
+      "pct_change": {
+        "companies_covered": 0.0,
+        "facts": 0.0
+      },
+      "withheld_uncitable": 0
+    }
+  },
+  "withheld_uncitable_by_family": {}
+}

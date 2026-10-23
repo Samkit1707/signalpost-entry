@@ -729,7 +729,8 @@ class OperationsTests(unittest.TestCase):
         profile = {
             "organisation_number": "923609016",
             "evidence": {
-                "registry": evidence("registry", "available", "official", "https://example.test", content_sha256="a" * 64),
+                "registry": evidence("registry", "available", "official", "https://example.test", content_sha256="a" * 64,
+                                     value={"organisasjonsnummer": "923609016", "navn": "EQUINOR ASA"}),
                 "website": evidence("website", "blocked", "company_site", "https://example.test", note="robots.txt denied"),
             },
         }
@@ -835,7 +836,9 @@ class WebsiteTests(unittest.TestCase):
 
     def test_only_extracts_declared_social_links(self):
         soup = BeautifulSoup('<a href="https://www.linkedin.com/company/example/">LinkedIn</a><a href="/about">About</a>', "html.parser")
-        self.assertEqual(_social_links("https://example.no", soup), [{"platform": "linkedin", "url": "https://linkedin.com/company/example"}])
+        links = _social_links("https://example.no", soup)
+        self.assertEqual([{key: item[key] for key in ("platform", "url")} for item in links], [{"platform": "linkedin", "url": "https://linkedin.com/company/example"}])
+        self.assertEqual(links[0]["raw"], 'href="https://www.linkedin.com/company/example/"')  # exact attribute as written
 
     def test_extracts_embedded_company_social_profiles(self):
         soup = BeautifulSoup(
@@ -844,7 +847,7 @@ class WebsiteTests(unittest.TestCase):
             "html.parser",
         )
         self.assertEqual(
-            _social_links("https://example.no/", soup),
+            [{key: item[key] for key in ("platform", "url")} for item in _social_links("https://example.no/", soup)],
             [
                 {"platform": "facebook", "url": "https://facebook.com/ExampleCompany"},
                 {"platform": "facebook", "url": "https://facebook.com/SecondCompany"},
@@ -861,7 +864,7 @@ class WebsiteTests(unittest.TestCase):
             ],
         }]
         self.assertEqual(
-            structured_social_links(value),
+            [{key: item[key] for key in ("platform", "url")} for item in structured_social_links(value)],
             [
                 {"platform": "facebook", "url": "https://facebook.com/ExampleCompany"},
                 {"platform": "instagram", "url": "https://instagram.com/examplecompany"},
@@ -1041,12 +1044,16 @@ class SentimentTests(unittest.TestCase):
 
 class OfficialNormalizationTests(unittest.TestCase):
     def test_accounting_obligation_is_categorical_for_as_but_not_enk(self):
-        company = accounting_obligation_assessment({"organisation_number": "923609016", "legal_form": "AS"})
+        company = accounting_obligation_assessment({"organisation_number": "923609016", "legal_form": "AS"},
+                                                   raw={"organisasjonsform.kode": "AS"}, snapshot_sha256="a" * 64)
         sole_trader = accounting_obligation_assessment({"organisation_number": "923609017", "legal_form": "ENK", "employees": 0})
         self.assertEqual(company["value"]["classification"], "required_by_legal_form")
         self.assertEqual(sole_trader["value"]["classification"], "threshold_or_activity_dependent")
         self.assertTrue(company["content_sha256"])
         self.assertEqual(company["source_row_key"], "923609016")
+        # v4: the hash is the bulk snapshot's, and the span quotes the row cells the rule reads
+        self.assertEqual(company["content_sha256"], "a" * 64)
+        self.assertIn('organisasjonsform.kode="AS"', company["value"]["claim_span"])
 
     def test_observed_filing_overrides_rule_path(self):
         record = accounting_obligation_assessment({"organisation_number": "923609018", "legal_form": "ENK", "latest_submitted_accounts": "2024"})

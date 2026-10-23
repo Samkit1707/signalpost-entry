@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html as html_lib
 import json
 import ipaddress
 import re
@@ -129,12 +130,20 @@ def robots_cached(url: str) -> bool:
         return robots_url in _ROBOTS_CACHE
 
 
-def _social_links(base_url: str, soup: BeautifulSoup) -> list[dict[str, str]]:
+def raw_attribute(html_text: str | None, name: str, value: str) -> str:
+    """The attribute as written in the page: `name="value"`, entity-escaped when that is how the HTML has it."""
+    escaped = html_lib.escape(value, quote=True)
+    if html_text is not None and value not in html_text and escaped in html_text:
+        return f'{name}="{escaped}"'
+    return f'{name}="{value}"'
+
+
+def _social_links(base_url: str, soup: BeautifulSoup, html_text: str | None = None, page_sha256: str | None = None) -> list[dict[str, str]]:
     found: dict[tuple[str, str], dict[str, str]] = {}
-    candidates = [str(node.get("href") or "") for node in soup.select("a[href]")]
-    candidates.extend(str(node.get("data-href") or "") for node in soup.select("[data-href]"))
-    candidates.extend(str(node.get("src") or "") for node in soup.select("iframe[src]"))
-    for candidate in candidates:
+    candidates = [("href", str(node.get("href") or "")) for node in soup.select("a[href]")]
+    candidates.extend(("data-href", str(node.get("data-href") or "")) for node in soup.select("[data-href]"))
+    candidates.extend(("src", str(node.get("src") or "")) for node in soup.select("iframe[src]"))
+    for attribute, candidate in candidates:
         url = urllib.parse.urljoin(base_url, candidate)
         parsed_candidate = urllib.parse.urlparse(url)
         if (parsed_candidate.hostname or "").casefold().removeprefix("www.") == "facebook.com" and parsed_candidate.path.startswith("/plugins/"):
@@ -144,11 +153,12 @@ def _social_links(base_url: str, soup: BeautifulSoup) -> list[dict[str, str]]:
         normalized = normalize_social_url(url)
         if not normalized:
             continue
-        found[(normalized["platform"], normalized["url"])] = normalized
+        found.setdefault((normalized["platform"], normalized["url"]), {
+            **normalized, "page_url": base_url, "content_sha256": page_sha256, "raw": raw_attribute(html_text, attribute, candidate)})
     return sorted(found.values(), key=lambda item: (item["platform"], item["url"]))
 
 
-def structured_social_links(value: Any) -> list[dict[str, str]]:
+def structured_social_links(value: Any, page_url: str | None = None, page_sha256: str | None = None) -> list[dict[str, str]]:
     found: dict[tuple[str, str], dict[str, str]] = {}
 
     def walk(node: Any) -> None:
@@ -160,7 +170,8 @@ def structured_social_links(value: Any) -> list[dict[str, str]]:
                     continue
                 normalized = normalize_social_url(raw.strip())
                 if normalized:
-                    found[(normalized["platform"], normalized["url"])] = normalized
+                    found.setdefault((normalized["platform"], normalized["url"]), {
+                        **normalized, "page_url": page_url, "content_sha256": page_sha256, "raw": f"JSON-LD sameAs={json.dumps(raw, ensure_ascii=False)}"})
             for child in node.values():
                 walk(child)
         elif isinstance(node, list):
@@ -314,10 +325,13 @@ def _image_url(value: Any) -> str | None:
     return value if isinstance(value, str) and value.startswith(("http://", "https://")) else None
 
 
-def site_contact(base_url: str, soup: BeautifulSoup, organisations: list[dict[str, Any]], pages_soups: list[tuple[str, BeautifulSoup]] = ()) -> dict[str, Any]:
-    """Contact facts a site states about itself: JSON-LD Organization on its own domain, own-domain mailto, footer tel links."""
+def site_contact(base_url: str, soup: BeautifulSoup, organisations: list[dict[str, Any]], pages_soups: list[tuple[str, BeautifulSoup]] = (),
+                 *, html_text: str | None = None, page_sha256: str | None = None) -> dict[str, Any]:
+    """Contact facts a site states about itself: JSON-LD Organization on its own domain, own-domain mailto, footer tel links.
+    `sources` maps "email:<value>" / "phone:<value>" to the page, its hash and the exact attribute it was read from."""
     domain = _registered_domain(base_url)
     own = []
+    sources: dict[str, dict[str, Any]] = {}
     for item in organisations:
         url = str(item.get("url") or item.get("@id") or "")
         if url.startswith("http") and _registered_domain(url) != domain:
@@ -330,6 +344,10 @@ def site_contact(base_url: str, soup: BeautifulSoup, organisations: list[dict[st
         if entry["email"] and _registered_domain("https://" + entry["email"].split("@")[-1]) != domain:
             entry["email"] = None
         if any(entry[key] for key in ("address", "telephone", "email", "logo")):
+            raw_fields = {"address": item.get("address"), "telephone": item.get("telephone"), "email": item.get("email"), "logo": item.get("logo")}
+            entry["page_url"], entry["content_sha256"] = base_url, page_sha256
+            entry["spans"] = {key: f"JSON-LD {_jsonld_type(item)}.{key}={json.dumps(raw_fields[key], ensure_ascii=False)}"
+                              for key in ("address", "telephone", "email", "logo") if entry[key]}
             own.append(entry)
     emails, phones = [], []
     for page_url, page_soup in [(base_url, soup), *pages_soups]:
@@ -337,30 +355,50 @@ def site_contact(base_url: str, soup: BeautifulSoup, organisations: list[dict[st
             email = urllib.parse.unquote(str(node.get("href"))[7:].split("?")[0]).strip().casefold()
             if "@" in email and _registered_domain("https://" + email.split("@")[-1]) == domain and email not in emails:
                 emails.append(email)
+                sources[f"email:{email}"] = {"page_url": page_url, "content_sha256": page_sha256 if page_url == base_url else None,
+                                             "raw": raw_attribute(html_text if page_url == base_url else None, "href", str(node.get("href")))}
         for node in page_soup.select('footer a[href^="tel:"], address a[href^="tel:"], [itemprop="telephone"]'):
             raw = str(node.get("href") or node.get_text(" ", strip=True)).removeprefix("tel:")
             digits = "".join(ch for ch in raw if ch.isdigit() or ch == "+")
             if len(digits.lstrip("+")) >= 8 and digits not in phones:
                 phones.append(digits)
-    return {"organisations": own[:5], "emails": emails[:5], "phones": phones[:3]}
+                raw_text = raw_attribute(html_text if page_url == base_url else None, "href", str(node.get("href"))) if node.get("href") \
+                    else collapse_text(node.get_text(" ", strip=True))
+                sources[f"phone:{digits}"] = {"page_url": page_url, "content_sha256": page_sha256 if page_url == base_url else None, "raw": raw_text}
+    return {"organisations": own[:5], "emails": emails[:5], "phones": phones[:3], "sources": sources}
+
+
+def collapse_text(text: str) -> str:
+    return " ".join(str(text or "").split())
+
+
+def _jsonld_type(item: dict[str, Any]) -> str:
+    kind = item.get("@type")
+    return str(kind[0] if isinstance(kind, list) and kind else kind or "Organization")
 
 
 _DATE_RE = __import__("re").compile(r"(20\d{2})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])")
 
 
-def page_dates(soup: BeautifulSoup, structured: dict[str, Any] | None = None) -> list[str]:
-    """Publication dates the page itself declares (meta, <time datetime>, JSON-LD). Never inferred."""
+def page_dates(soup: BeautifulSoup, structured: dict[str, Any] | None = None, spans: dict[str, str] | None = None) -> list[str]:
+    """Publication dates the page itself declares (meta, <time datetime>, JSON-LD). Never inferred.
+    `spans`, when given, is filled with date -> the exact attribute or JSON-LD field it was read from."""
     found: list[str] = []
+    labels: list[str] = []
     for node in soup.select('meta[property="article:published_time"], meta[property="article:modified_time"], meta[name="date"], meta[itemprop="datePublished"]'):
         found.append(str(node.get("content") or ""))
+        selector = next((f'{key}="{node.get(key)}"' for key in ("property", "name", "itemprop") if node.get(key)), "meta")
+        labels.append(f'<meta {selector} content="{node.get("content") or ""}">')
     for node in soup.select("time[datetime]"):
         found.append(str(node.get("datetime") or ""))
+        labels.append(f'<time datetime="{node.get("datetime") or ""}">')
 
     def walk(value: Any) -> None:
         if isinstance(value, dict):
             for key in ("datePublished", "dateModified", "datePosted", "uploadDate"):
                 if isinstance(value.get(key), str):
                     found.append(value[key])
+                    labels.append(f"JSON-LD {key}={json.dumps(value[key])}")
             for child in value.values():
                 walk(child)
         elif isinstance(value, list):
@@ -369,6 +407,11 @@ def page_dates(soup: BeautifulSoup, structured: dict[str, Any] | None = None) ->
 
     walk((structured or {}).get("json-ld", []))
     dates = sorted({"-".join(match.groups()) for item in found for match in [_DATE_RE.search(item)] if match}, reverse=True)
+    if spans is not None:
+        for item, label in zip(found, labels):
+            match = _DATE_RE.search(item)
+            if match:
+                spans.setdefault("-".join(match.groups()), label)
     return dates[:20]
 
 
@@ -382,6 +425,8 @@ def job_postings(structured: dict[str, Any] | None) -> list[dict[str, Any]]:
             kinds = set(kind if isinstance(kind, list) else [kind])
             if "JobPosting" in kinds:
                 jobs.append({
+                    "claim_span": "JSON-LD JobPosting." + "; JobPosting.".join(
+                        f"{key}={json.dumps(value.get(key), ensure_ascii=False)}" for key in ("title", "datePosted", "validThrough") if value.get(key)),
                     "title": str(value.get("title") or "")[:300],
                     "date_posted": str(value.get("datePosted") or "")[:40] or None,
                     "valid_through": str(value.get("validThrough") or "")[:40] or None,
@@ -421,32 +466,39 @@ def _fetch_secondary_page(url: str, *, homepage_domain: str, timeout: float, max
         except Exception:
             page_structured = {}
         page_title = page_soup.title.get_text(" ", strip=True)[:500] if page_soup.title else ""
+        page_sha256 = __import__("hashlib").sha256(raw).hexdigest()
+        date_spans: dict[str, str] = {}
         page = {
             "url": final_url,
             "title": page_title,
             "main_text_excerpt": page_text[:5000],
-            "content_sha256": __import__("hashlib").sha256(raw).hexdigest(),
+            "content_sha256": page_sha256,
             "category": page_category(final_url, page_title),
             "identity_text_excerpt": identity_excerpt(page_soup),
-            "declared_dates": page_dates(page_soup, page_structured),
+            "declared_dates": page_dates(page_soup, page_structured, date_spans),
+            "declared_date_spans": date_spans,
             "job_postings": job_postings(page_structured),
         }
         if page["category"] == "news":
             page["news_items"] = news_listing_items(final_url, page_soup)
         if page["category"] == "identity" or probe:
             page["category"] = page["category"] or "identity"
-            page["site_contact"] = site_contact(final_url, page_soup, [])
-        return page, _social_links(final_url, page_soup), 2, len(raw), elapsed, None
+            page["site_contact"] = site_contact(final_url, page_soup, [], html_text=page_html, page_sha256=page_sha256)
+        return page, _social_links(final_url, page_soup, page_html, page_sha256), 2, len(raw), elapsed, None
     except Exception as exc:
         return None, [], page_request_count, 0, int((time.monotonic() - started) * 1000), f"{type(exc).__name__}: {str(exc)[:120]}"
 
 
 def _merge_contact(base: dict[str, Any], others: list[dict[str, Any]]) -> dict[str, Any]:
     merged = {key: list(base.get(key) or []) for key in ("organisations", "emails", "phones")}
+    sources = dict(base.get("sources") or {})
     for other in others:
         for key in ("emails", "phones"):
             merged[key] += [item for item in other.get(key) or [] if item not in merged[key]]
-    return {"organisations": merged["organisations"][:5], "emails": merged["emails"][:5], "phones": merged["phones"][:3]}
+        for key, source in (other.get("sources") or {}).items():
+            sources.setdefault(key, source)
+    return {"organisations": merged["organisations"][:5], "emails": merged["emails"][:5], "phones": merged["phones"][:3],
+            "sources": sources}
 
 
 def _jsonld_organisations(metadata: dict[str, Any]) -> list[dict[str, Any]]:
@@ -507,6 +559,8 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
         title = soup.title.get_text(" ", strip=True) if soup.title else ""
         description_tag = soup.select_one('meta[name="description"], meta[property="og:description"]')
         description = str(description_tag.get("content") or "").strip() if description_tag else ""
+        homepage_sha256 = __import__("hashlib").sha256(raw).hexdigest()
+        homepage_date_spans: dict[str, str] = {}
         value = {
             "requested_url": normalized,
             "final_url": final_url,
@@ -514,11 +568,12 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
             "title": title[:500],
             "description": description[:2000],
             "main_text_excerpt": text[:5000],
-            "social_links": _social_links(final_url, soup),
+            "social_links": _social_links(final_url, soup, html, homepage_sha256),
             "structured_organisations": _jsonld_organisations(structured),
-            "content_sha256": __import__("hashlib").sha256(raw).hexdigest(),
+            "content_sha256": homepage_sha256,
             "extraction_state": _extraction_state(text, soup),
-            "declared_dates": page_dates(soup, structured),
+            "declared_dates": page_dates(soup, structured, homepage_date_spans),
+            "declared_date_spans": homepage_date_spans,
             "job_postings": job_postings(structured),
             "identity_text_excerpt": identity_excerpt(soup),
             "feed_links": feed_links(final_url, soup),
@@ -555,10 +610,15 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
             elif page_error:
                 crawl_errors.append({"url": page_url, "error": page_error})
         value["pages"] = pages
-        social.extend(structured_social_links(value["structured_organisations"]))
-        value["site_contact"] = _merge_contact(site_contact(final_url, soup, value["structured_organisations"]),
+        social.extend(structured_social_links(value["structured_organisations"], final_url, homepage_sha256))
+        value["site_contact"] = _merge_contact(site_contact(final_url, soup, value["structured_organisations"], html_text=html,
+                                                            page_sha256=homepage_sha256),
                                                [page.get("site_contact") or {} for page in pages[1:]])
-        value["social_links"] = list({(item["platform"], item["url"]): item for item in social}.values())
+        # first source of each profile wins (homepage before secondary pages)
+        merged_social: dict[tuple[str, str], dict[str, Any]] = {}
+        for item in social:
+            merged_social.setdefault((item["platform"], item["url"]), item)
+        value["social_links"] = list(merged_social.values())
         value["crawl_errors"] = crawl_errors
         return evidence("website", "available", source_type, final_url, value=value, note="Company-controlled claim layer; not an official registry fact", content_sha256=value["content_sha256"]), {"requests": requests, "bytes": bytes_received, "latencies_ms": page_latencies}
     except urllib.error.HTTPError as exc:

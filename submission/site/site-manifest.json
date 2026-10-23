@@ -1,6 +1,6 @@
 {
-  "run_id": "smoke-v3-2026-10-20",
-  "completed_at": "2026-10-20T13:15:42.939443Z",
+  "run_id": "smoke-v4",
+  "completed_at": "2026-10-23T17:21:54.116920Z",
   "companies": 100,
   "company_pages": 100,
   "with_summary": 100,

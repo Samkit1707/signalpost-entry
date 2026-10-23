@@ -1,0 +1,138 @@
+{
+  "before": {
+    "companies": 300,
+    "families": {
+      "registry_identity": {
+        "companies_covered": 300,
+        "claims": 4733,
+        "facts": 4733
+      },
+      "contact": {
+        "companies_covered": 110,
+        "claims": 212,
+        "facts": 212
+      },
+      "people_roles": {
+        "companies_covered": 299,
+        "claims": 1438,
+        "facts": 1139
+      },
+      "locations": {
+        "companies_covered": 222,
+        "claims": 447,
+        "facts": 225
+      },
+      "financials": {
+        "companies_covered": 299,
+        "claims": 4267,
+        "facts": 3968
+      },
+      "workforce": {
+        "companies_covered": 43,
+        "claims": 43,
+        "facts": 43
+      },
+      "group": {
+        "companies_covered": 18,
+        "claims": 99,
+        "facts": 81
+      },
+      "website": {
+        "companies_covered": 23,
+        "claims": 23,
+        "facts": 23
+      },
+      "external_profiles": {
+        "companies_covered": 12,
+        "claims": 41,
+        "facts": 29
+      },
+      "jobs": {
+        "companies_covered": 3,
+        "claims": 6,
+        "facts": 3
+      },
+      "news_activity": {
+        "companies_covered": 12,
+        "claims": 49,
+        "facts": 60
+      }
+    },
+    "operations": {
+      "requests": 2441,
+      "requests_per_company": 8.14,
+      "projected_requests_for_1000": 8140,
+      "p50_ms": 249,
+      "p95_ms": 3973,
+      "runtime_ms": 400607
+    }
+  },
+  "after": {
+    "companies": 300,
+    "families": {
+      "registry_identity": {
+        "companies_covered": 300,
+        "claims": 4733,
+        "facts": 4733
+      },
+      "contact": {
+        "companies_covered": 110,
+        "claims": 212,
+        "facts": 212
+      },
+      "people_roles": {
+        "companies_covered": 299,
+        "claims": 1438,
+        "facts": 1139
+      },
+      "locations": {
+        "companies_covered": 222,
+        "claims": 447,
+        "facts": 225
+      },
+      "financials": {
+        "companies_covered": 299,
+        "claims": 4267,
+        "facts": 3968
+      },
+      "workforce": {
+        "companies_covered": 43,
+        "claims": 43,
+        "facts": 43
+      },
+      "group": {
+        "companies_covered": 18,
+        "claims": 99,
+        "facts": 81
+      },
+      "website": {
+        "companies_covered": 23,
+        "claims": 23,
+        "facts": 23
+      },
+      "external_profiles": {
+        "companies_covered": 12,
+        "claims": 41,
+        "facts": 29
+      },
+      "jobs": {
+        "companies_covered": 3,
+        "claims": 6,
+        "facts": 3
+      },
+      "news_activity": {
+        "companies_covered": 12,
+        "claims": 49,
+        "facts": 60
+      }
+    },
+    "operations": {
+      "requests": 2441,
+      "requests_per_company": 8.14,
+      "projected_requests_for_1000": 8140,
+      "p50_ms": 192,
+      "p95_ms": 2813,
+      "runtime_ms": 271512
+    }
+  }
+}
