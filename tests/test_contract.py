@@ -67,7 +67,8 @@ def test_published_website_claim_carries_the_proving_span():
     env = envelope({"registry": registry_record(), "website": website_record(True, 1.0)})
     website = claim(env, "official_website")
     assert website["availability"] == "available" and website["value"] == "https://nordlysbakeri.no/"
-    assert website["confidence"] == 1.0
+    assert website["confidence"] == 0.95 and website["confidence_level"] == "high"
+    assert website["discovery_method"] == "registry_hjemmeside" and "prints this organisation number" in website["proof"]
     span = next(item for item in env["evidence"] if item["id"] == website["evidence_ids"][0])["claim_span"]
     assert "923 609 016" in span
     assert next(item for item in env["evidence"] if item["id"] == website["evidence_ids"][0])["source_class"] == "company_owned"
@@ -83,7 +84,7 @@ def test_missing_values_are_never_zero():
     workforce = evidence("workforce", "not_found", "official_registry_bulk", "https://data.brreg.no/x", note="no count")
     jobs = evidence("company_jobs", "available", "company_website_careers", "https://nordlysbakeri.no/", value={
         "careers_pages": [{"url": "https://nordlysbakeri.no/jobb", "title": "Jobb hos oss", "content_sha256": "c" * 64,
-                           "claim_span": "Jobb hos oss"}],
+                           "claim_span": "Jobb hos oss", "confidence": "high"}],
         "job_postings": [], "open_postings_found": 0})
     env = envelope({"registry": registry_record(), "website": website_record(True, 1.0), "workforce": workforce, "company_jobs": jobs})
     employees = claim(env, "registered_employees")

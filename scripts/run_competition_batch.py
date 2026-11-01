@@ -29,7 +29,8 @@ from norway_company_agent.evidence import utc_now  # noqa: E402
 from norway_company_agent.identity import apply_website_identity_gate  # noqa: E402
 from norway_company_agent.official import fetch_official_modules  # noqa: E402
 from norway_company_agent.registry_bulk import BulkUnavailable, ensure_bulk  # noqa: E402
-from norway_company_agent.website import fetch_website  # noqa: E402
+from norway_company_agent.website import fetch_website, normalize_homepage  # noqa: E402
+from norway_company_agent.confidence import link_report  # noqa: E402
 from norway_company_agent import wikidata as wikidata_source  # noqa: E402
 from norway_company_agent.enrichment import (  # noqa: E402
     ENRICHMENT_MODULES,
@@ -197,8 +198,25 @@ def main() -> None:
                 apply_wikidata_identity_support(profile, wiki)
                 current = profile["evidence"]["website"]
                 published = bool(((current.get("value") or {}).get("identity_assessment") or {}).get("publishable"))
+                wiki_url = wikidata_website_candidate(wiki)
+                fetched_urls = [(current.get("value") or {}).get("final_url")]
+                if not published and wiki_url and source_type != "wikidata_linked_company_website" \
+                        and (urlparse(wiki_url).hostname or "").removeprefix("www.") != (urlparse(normalize_homepage(url) or "").hostname or "").removeprefix("www."):
+                    # v5: the registry website failed or was not proven; the exact Wikidata item's P856 is the next candidate
+                    wiki_record, wiki_metrics = fetch_website(wiki_url, source_type="wikidata_linked_company_website")
+                    for key in ("requests", "bytes"):
+                        website_metrics[key] += wiki_metrics[key]
+                    website_metrics["latencies_ms"] = website_metrics["latencies_ms"] + wiki_metrics["latencies_ms"]
+                    gated = apply_website_identity_gate(profile, wiki_record)["website"]
+                    fetched_urls.append((gated.get("value") or {}).get("final_url"))
+                    if ((gated.get("value") or {}).get("identity_assessment") or {}).get("publishable"):
+                        profile["evidence"]["website"] = current = gated
+                        published = True
+                    url = url or wiki_url
                 if not published and not args.no_domain_guess:
-                    tried = {urlparse(item).hostname or "" for item in (url, (current.get("value") or {}).get("final_url")) if item}
+                    # only hosts a page was actually fetched from: a registry 'www.' host that did not resolve must not
+                    # stop the email-domain candidate on the bare domain (300 sample: www.boliginkasso.no -> boliginkasso.no)
+                    tried = {urlparse(normalize_homepage(item) or "").hostname or "" for item in fetched_urls if item}
                     tried = {host.removeprefix("www.") for host in tried if host}
                     deadline_ok = lambda: not (args.deadline_minutes and (time.monotonic() - clock_start) > args.deadline_minutes * 60)  # noqa: E731
                     accepted, guess_metrics, trail = discover_website(profile, fetch_website, apply_website_identity_gate,
@@ -301,6 +319,7 @@ def main() -> None:
             for module in requested_modules
         },
         "validation": validation,
+        "links": link_report(envelopes),
     }
     if args.site_dir:
         # The saved site is built from exactly these envelopes; a site failure is reported, never drops envelopes.

@@ -1,11 +1,11 @@
 {
-  "run_id": "smoke-v4",
-  "completed_at": "2026-10-23T17:21:54.116920Z",
+  "run_id": "smoke-v5",
+  "completed_at": "2026-11-01T09:24:53.535207Z",
   "companies": 100,
   "company_pages": 100,
   "with_summary": 100,
-  "with_verified_website": 7,
-  "with_dated_news": 4,
+  "with_verified_website": 6,
+  "with_dated_news": 3,
   "entry": "index.html",
   "compare": "compare.html"
 }

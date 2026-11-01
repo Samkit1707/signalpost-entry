@@ -1,4 +1,57 @@
-# Submission evidence (v4)
+# Submission evidence (v5)
+
+Official command (after `uv sync`), run on 1–2 Nov 2026 with the 20 Oct registry bulk snapshot passed as `--bulk` and the
+same Wikidata P2333 cache, so v4 and v5 read the same inputs:
+
+```bash
+uv run python scripts/run_competition_batch.py --organisations "$INPUT" \
+  --profiles-output out/profiles.jsonl --output out/envelopes.jsonl --report out/run-report.json \
+  --run-id "$RUN_ID" --expected-count "$COUNT" --deadline-minutes 40
+```
+
+| File | Content |
+|---|---|
+| `smoke-report.json`, `smoke-envelopes.jsonl`, `smoke-run.log` | 100-company smoke on v5: 100/100 envelopes, validation passed, 912 requests, p50 252 ms, p95 2,295 ms, 107 s, $0. 3,773 published claims; 0 citation, state or site-ownership problems; 0 withheld |
+| `site/` | the static site the smoke run wrote; open `site/index.html`. Company pages have a "Links and confidence" table |
+| `v5-compare-300.json` | v4 (c194d02) vs v5 on the same 300 companies, run back to back on 2 Nov: recall per family, news and social links before/after, every v4 news/social link v5 no longer publishes with v5's reason, websites per discovery method, run operations (`scripts/compare_v5.py`) |
+| `run-1000-report.json` | 1,000-company timing run on v5: 1,000/1,000, validation passed, 8,369 requests, p50 195 ms, p95 1,963 ms, 9 min 34 s, 39,107 published claims, 0 problems |
+| `audit-v5.html` | hand-check page for 60 companies never run before (30 random, 30 random with a registry website): every published website, social profile, news and job link with proof and confidence, weakest first, plus every rejected candidate (`scripts/build_audit_v5.py`). Checked by hand |
+| `tests.txt`, `fresh-clone-check.txt` | offline tests (204); clone → `uv sync --frozen` → tests → replay → live 5-company run |
+| `v4-compare-300.json`, `recall-300-v4.json` | v3 → v4 evidence (23 Oct), kept for reference |
+| `run-1000-report-v3.json`, `recall-300.json`, `audit-v3.html` | v3 evidence (20 Oct), kept for reference |
+
+## v4 → v5 on the 300 sample
+
+| | v4 (c194d02) | v5 |
+|---|---|---|
+| published news links | 67 on 13 companies (45 `dated_news`, 22 `company_activity`) | **11 on 3 companies** (all `dated_news`; 4 high, 7 medium) |
+| published social profile links | 26 on 12 companies | **22 on 11 companies** (16 high, 8 medium); `social_profiles` claim on 11 companies, 22 profiles |
+| published websites | 23 | 23 (21 high, 2 medium): registry hjemmeside 9, email domain 2, name variant 12 |
+| links with `confidence_level` and `proof` | – | all |
+| citation / state / site-ownership problems | 0 / 0 / 0 | 0 / 0 / 0 |
+| requests, p50, p95 | 2,447, 199 ms, 1,690 ms | 2,489, 254 ms, 1,885 ms |
+
+Recall is unchanged in every other family: registry identity 300/4,733, contact 110/212, roles 299/1,139, locations
+221/224, financials 299/3,968, workforce 43/43, group 18/56, website 23/23, jobs 3/3. External profiles go from 12/29 to
+11/25 and news/activity from 13/68 to 3/11.
+
+News dropped (56 links), each with v5's reason in `v5-compare-300.json`:
+- 22 `company_activity` pages: contact, about, product, store and listing pages, and homepages (`/kontakt/`, `/om-oss/`, `/fa-pristilbud/`,
+  `/vare-butikker/`, `/aktuelt/`) that v4 published because they declared a date;
+- 18 posts whose text does not name the company (recipes, portfolio and product posts);
+- 2 pages that are not articles; 4 not verified within the per-site request cap; 10 older items of sites whose 10 newest
+  articles were checked.
+
+Social dropped (5): 3 linked only from the page body, not the header, footer or JSON-LD sameAs; 2 handles naming more
+than the company (`jæder-ådne-espeland-as`, `alabasterstudiooslo`). Added (1): `facebook.com/hotspring.no` for NORWEGIAN
+SPA AS, matched on the site's brand. Facebook's `facebook.com/p/Name-<id>` page URLs are now read (JÆDER AS).
+
+On the v4 smoke, AIOTA AS had www.aiota.no published; the site now redirects to a rebranded page whose footer names
+"Tagtech Solutions AS" and no longer shows the registry phone, so it is not published (v4 rules give the same result today).
+
+---
+
+# Earlier evidence (v4)
 
 Official command (after `uv sync`), run on 23 Oct 2026; the registry bulk snapshot of 20 Oct was passed with `--bulk`
 so that v3 and v4 read the same snapshot:

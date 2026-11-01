@@ -71,7 +71,7 @@ def _source(envelope: dict[str, Any], claim: dict[str, Any] | None, evidence: di
 
 def _fact(envelope: dict[str, Any], evidence: dict[str, dict[str, Any]], key: str, label: str,
           claim: dict[str, Any] | None, text: str | None, *, link: str | None = None,
-          as_of: str | None = None) -> dict[str, Any]:
+          as_of: str | None = None, links: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     source = _source(envelope, claim, evidence)
     if as_of:
         source["as_of"] = as_of
@@ -79,7 +79,10 @@ def _fact(envelope: dict[str, Any], evidence: dict[str, dict[str, Any]], key: st
     missing = not text
     if missing:
         text = AVAILABILITY_TEXT.get("not_available" if availability == "available" else availability, "Not available")
-    return {"key": key, "label": label, "text": text, "missing": missing, "link": safe_url(link), **source}
+    fact = {"key": key, "label": label, "text": text, "missing": missing, "link": safe_url(link), **source}
+    if links and not missing:
+        fact["links"] = [{**item, "url": safe_url(item.get("url"))} for item in links if safe_url(item.get("url"))]
+    return fact
 
 
 def _org_name(value: Any) -> str:
@@ -146,9 +149,10 @@ def company_facts(envelope: dict[str, Any]) -> list[dict[str, Any]]:
 
     website = value("official_website")
     add("website", "Verified website", "official_website", website, link=website)
-    profiles = value("external_profiles") or []
-    add("profiles", "Company-owned profiles", "external_profiles",
-        ", ".join(sorted({str(item.get("platform")) for item in profiles})) if profiles else None)
+    profiles = value("social_profiles") or []
+    add("profiles", "Social profiles", "social_profiles",
+        " · ".join(f"{item.get('platform')}: {item.get('url')} ({item.get('confidence') or '?'})" for item in profiles) if profiles else None,
+        links=profiles)
     news = sorted([claim for claim in _claims(envelope, "dated_news") if claim.get("availability") == "available"],
                   key=lambda claim: claim["value"]["published_at"], reverse=True)
     if news:
@@ -349,6 +353,12 @@ def _link(url: Any) -> str:
 
 
 def _value_html(fact: dict[str, Any]) -> str:
+    if fact.get("links"):
+        # one clickable link per profile, with its confidence and proof
+        return "<br>".join(
+            f'<a href="{esc(item["url"])}" target="_blank" rel="noopener noreferrer">{esc(item.get("platform") or "")}: {esc(item["url"])}</a> '
+            f'{_chip(item.get("confidence") or "unknown", "good" if item.get("confidence") == "high" else "warn")}'
+            f'{"<br><small>" + esc(item["proof"]) + "</small>" if item.get("proof") else ""}' for item in fact["links"])
     text = esc(fact["text"])
     if fact.get("link") and not fact.get("missing"):
         text = f'<a href="{esc(fact["link"])}" target="_blank" rel="noopener noreferrer">{text}</a>'
@@ -418,11 +428,57 @@ def facts_table(envelope: dict[str, Any]) -> str:
             f'<thead><tr><th>Fact</th><th>Value</th><th>Source and date</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div></details>')
 
 
+LINK_LABELS = {"official_website": "Website", "external_profile": "Profile", "dated_news": "News", "company_activity": "Article",
+               "careers_page": "Careers page", "job_posting": "Job posting"}
+
+
+def links_section(envelope: dict[str, Any]) -> str:
+    """Every published link (website, profiles, news, jobs) with its confidence and proof, weakest first, and the
+    candidates that were found but not published, with the reason."""
+    evidence = _evidence_map(envelope)
+    rows = []
+    for claim in envelope.get("claims") or []:
+        field = claim.get("field")
+        if field not in LINK_LABELS or claim.get("availability") != "available":
+            continue
+        value = claim.get("value")
+        if field == "official_website":
+            text, link = str(value), value
+        elif field == "dated_news":
+            text, link = f'{value.get("title")} ({value.get("published_at")})', value.get("url")
+        elif field == "company_activity":
+            for item in value or []:
+                rows.append((claim, f'{item.get("title")} ({item.get("latest_declared_date")})', item.get("url")))
+            continue
+        else:
+            text, link = fact_text(field, value)
+        rows.append((claim, text, link))
+    rows.sort(key=lambda row: (row[0].get("confidence_level") != "medium", LINK_LABELS[row[0]["field"]]))
+    body = ""
+    for claim, text, link in rows:
+        level = claim.get("confidence_level") or "unknown"
+        extra = f' · found by {esc(str(claim.get("discovery_method")).replace("_", " "))}' if claim.get("discovery_method") else ""
+        fact = {**_source(envelope, claim, evidence), "text": text, "link": safe_url(link), "missing": False}
+        body += (f'<tr><td>{esc(LINK_LABELS[claim["field"]])}</td><td>{_value_html(fact)}</td>'
+                 f'<td>{_chip(level, "good" if level == "high" else "warn")}</td>'
+                 f'<td>{esc(claim.get("proof") or "")}{extra}{_source_html(fact)}</td></tr>')
+    html_out = (f'<div class="scroll"><table class="facts"><thead><tr><th>Kind</th><th>Link</th><th>Confidence</th><th>Proof</th></tr></thead>'
+                f'<tbody>{body}</tbody></table></div>') if body else '<p class="empty">No website, profile, news or job link was published for this company.</p>'
+    missed = [(claim.get("field"), item) for claim in envelope.get("claims") or [] if claim.get("field") != "social_profiles"
+              for item in claim.get("not_published") or []]
+    if missed:
+        items = "".join(f'<li>{esc(LINK_LABELS.get(field, "Profile" if field == "external_profiles" else field))}: '
+                        f'<code>{esc(item.get("url"))}</code> — {esc(item.get("reason"))}</li>' for field, item in missed[:20])
+        html_out += f'<details><summary>{len(missed)} candidate link(s) found but not published, with the reason</summary><ul>{items}</ul></details>'
+    return html_out
+
+
 def company_page(envelope: dict[str, Any], record: dict[str, Any], run: dict[str, Any]) -> str:
     org = envelope["organisation_number"]
     evidence = _evidence_map(envelope)
     synthesis = envelope.get("synthesis") or {}
-    topics = {"what_it_does": "What it is and does", "financials": "Latest financials", "changes": "What changed", "unknown": "What is unknown"}
+    topics = {"what_it_does": "What it is and does", "financials": "Latest financials", "changes": "What changed",
+              "why_it_matters": "Why the change matters", "unknown": "What is unknown"}
     summary_html = ""
     for topic, heading in topics.items():
         items = [item for item in synthesis.get("sentences") or [] if item.get("topic") == topic]
@@ -490,6 +546,7 @@ def company_page(envelope: dict[str, Any], record: dict[str, Any], run: dict[str
             f'<h2>Summary</h2><section class="summary" aria-label="Sourced summary">{summary_html}</section>'
             f'<h2>Facts</h2><div class="scroll"><table class="facts"><thead><tr><th>Fact</th><th>Value</th><th>Source and date</th></tr></thead>'
             f'<tbody>{fact_rows}</tbody></table></div>'
+            f'<h2>Links and confidence</h2>{links_section(envelope)}'
             f'<h2>All facts</h2>{facts_table(envelope)}'
             f'<h2>Filed annual accounts</h2>{fin_html}'
             f'<h2>Dated news from its verified website</h2>{news_html}'

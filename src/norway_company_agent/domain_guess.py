@@ -202,7 +202,8 @@ def discover_website(profile: dict[str, Any], fetch, gate, *, resolver=resolves,
         spend(fetched)
         gated = gate(profile, record)
         assessment = gated.get("assessment") or {}
-        entry = {"candidate": domain, "method": method, "result": record.get("status"), "identity_score": assessment.get("score"),
+        entry = {"candidate": domain, "method": method, "result": record.get("status"), "note": record.get("note") if record.get("status") != "available" else None,
+                 "identity_score": assessment.get("score"),
                  "reasons": assessment.get("reasons"), "group_site": assessment.get("group_site"),
                  "pages_checked": [page.get("url") for page in ((record.get("value") or {}).get("pages") or [])],
                  "final_url": (record.get("value") or {}).get("final_url"), "content_sha256": record.get("content_sha256"),

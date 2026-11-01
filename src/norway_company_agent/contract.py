@@ -14,6 +14,7 @@ import re
 from typing import Any, Callable
 
 from .citations import HASH, csv_span, json_span
+from .confidence import LEVEL_SCORE, discovery_method, website_confidence
 from .facts import fact_claims, live_as_bulk_row, row_citer
 from .identity import _fold, full_legal_name_words, org_number_present
 from .synthesis import newest_filed_record
@@ -502,7 +503,118 @@ def contract_fields(profile: dict[str, Any], module_states: dict[str, dict[str, 
     website_score = ((_row(records.get("website") or {}).get("identity_assessment") or {}).get("score"))
     claims.extend(fact_claims(profile, records, module_states, add_evidence, float(website_score) if website_score else None,
                               registry_row, registry_record, related, withheld))
+    label_link_claims(profile, records, claims, withheld)
+    claims.extend(social_profiles_claims(claims))
     return {"claims": claims, "evidence": evidence_list, "uncited_withheld": withheld}
+
+
+# Claims whose value is a link or a fact read from the identity-gated site: each gets confidence_level + proof.
+SITE_FACT_FIELDS = {"site_address", "site_phone", "site_email", "site_logo"}
+LINK_FIELDS = {"official_website", "external_profile", "external_profiles", "dated_news", "company_activity", "careers_page",
+               "job_posting", "company_jobs", "group_website"} | SITE_FACT_FIELDS
+
+
+def label_link_claims(profile: dict[str, Any], records: dict[str, Any], claims: list[dict[str, Any]],
+                      withheld: list[dict[str, Any]]) -> None:
+    """v5: `confidence_level` (high/medium), numeric `confidence` to match, and `proof` on every published link claim.
+    A link claim with no level is not published: it becomes not_available with a note. Candidates that failed a
+    family's rule are listed on that family's claim as `not_published` (URL and reason; never a value)."""
+    site_level, site_reason = website_confidence(profile)
+    site_url = (_row(records.get("website") or {})).get("final_url")
+    profiles = {item.get("url"): item for item in (_row(records.get("external_profiles") or {})).get("profiles") or []}
+    news = {item.get("url"): item for item in (_row(records.get("dated_news") or {})).get("items") or []}
+    activity = (_row(records.get("company_activity") or {})).get("items") or []
+    jobs = _row(records.get("company_jobs") or {})
+    careers = {item.get("url"): item for item in jobs.get("careers_pages") or []}
+    postings = {(item.get("source_url"), item.get("title")): item for item in jobs.get("job_postings") or []}
+
+    def rejected(module: str) -> list[dict[str, Any]]:
+        record = records.get(module) or {}
+        return list(_row(record).get("not_published") or (record.get("checked") or {}).get("not_published") or [])
+
+    def worst(levels: list[str | None]) -> str | None:
+        return None if not levels or None in levels else "medium" if "medium" in levels else "high"
+
+    for claim in claims:
+        field = claim.get("field")
+        if field not in LINK_FIELDS:
+            continue
+        if field in {"external_profiles", "dated_news"} and claim.get("availability") != "available":
+            missed = rejected(field)
+            if missed:
+                claim["not_published"] = missed[:10]
+                claim.setdefault("note", f"{len(missed)} candidate(s) found but not published: " + "; ".join(
+                    f"{item.get('url')}: {item.get('reason')}" for item in missed[:3]))
+        if claim.get("availability") != "available":
+            continue
+        value = claim.get("value")
+        level, proof = None, None
+        if field == "official_website":
+            level, proof = site_level, site_reason
+            claim["discovery_method"] = discovery_method(profile)
+        elif field == "external_profile":
+            item = profiles.get((value or {}).get("url")) or {}
+            level, proof = item.get("confidence"), item.get("proof")
+        elif field == "external_profiles":
+            items = [profiles.get(entry.get("url")) or {} for entry in value or []]
+            level, proof = worst([item.get("confidence") for item in items]), "; ".join(f"{item.get('url')}: {item.get('proof')}" for item in items)
+            for entry, item in zip(value or [], items):
+                entry.update({"confidence": item.get("confidence"), "proof": item.get("proof")})
+            if rejected("external_profiles"):
+                claim["not_published"] = rejected("external_profiles")[:10]
+        elif field == "dated_news":
+            item = news.get((value or {}).get("url")) or {}
+            level = item.get("confidence")
+            proof = (f"{item.get('article_evidence')} on the verified site {site_url}; date from {item.get('date_from')}; "
+                     f"names the company ({str(item.get('company_named') or '').replace('_', ' ')}): “{item.get('company_mention')}”") if level else None
+        elif field == "company_activity":
+            level = worst([item.get("confidence") for item in activity])
+            proof = "; ".join(f"{item.get('url')}: “{item.get('company_mention')}”" for item in activity)
+        elif field == "careers_page":
+            item = careers.get((value or {}).get("url")) or {}
+            level, proof = item.get("confidence"), item.get("proof")
+        elif field == "job_posting":
+            item = postings.get(((value or {}).get("source_url"), (value or {}).get("title"))) or {}
+            level, proof = item.get("confidence"), item.get("proof")
+        elif field == "company_jobs":
+            levels = [item.get("confidence") for item in [*careers.values(), *postings.values()]]
+            level, proof = worst(levels), f"careers pages and JSON-LD JobPosting on the verified site {site_url}"
+        elif field == "group_website":
+            level, proof = "medium", "group site: the page quotes this company's group organisation numbers; not this company's own site"
+        elif field in SITE_FACT_FIELDS:
+            level, proof = site_level, f"stated on the verified site {site_url}"
+        if level is None:
+            withheld.append({"field": field, "module": claim.get("module"), "reason": "no confidence level"})
+            claim.update({"value": None, "availability": "not_available", "confidence": None, "as_of": None,
+                          "note": "withheld: link found but its confidence could not be established"})
+            continue
+        claim.update({"confidence_level": level, "confidence": LEVEL_SCORE[level], "proof": proof})
+
+
+SOCIAL_PLATFORMS = {"facebook", "linkedin", "instagram", "youtube", "x", "tiktok"}
+
+
+def social_profiles_claims(claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The company's social profiles under a plainly named field, `social_profiles`: the same links, confidence, proof
+    and evidence as the `external_profiles` claim (kept as it was), without non-social entries such as Wikipedia."""
+    aggregate = next((claim for claim in claims if claim.get("field") == "external_profiles"), None)
+    if aggregate is None:
+        return []
+    claim = {**aggregate, "field": "social_profiles"}
+    claim.pop("fact_level", None)
+    social = [dict(entry) for entry in aggregate.get("value") or [] if entry.get("platform") in SOCIAL_PLATFORMS]
+    if aggregate.get("availability") == "available" and social:
+        levels = [entry.get("confidence") for entry in social]
+        level = "medium" if "medium" in levels else "high"
+        claim.update({"value": social, "confidence_level": level, "confidence": LEVEL_SCORE[level],
+                      "proof": "; ".join(f"{entry.get('url')}: {entry.get('proof')}" for entry in social)})
+    elif aggregate.get("availability") == "available":
+        claim.update({"value": None, "availability": "not_available", "confidence": None, "as_of": None,
+                      "note": "no social profile (Facebook, LinkedIn, Instagram, YouTube, X, TikTok) passed the identity rule; "
+                              "only non-social profiles were published"})
+        for key in ("confidence_level", "proof"):
+            claim.pop(key, None)
+    return [claim]
 
 
 def _dated_news_claims(record: dict[str, Any], state: str, confidence: float | None,

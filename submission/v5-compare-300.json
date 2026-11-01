@@ -1,0 +1,669 @@
+{
+ "companies": {
+  "v4": 300,
+  "v5": 300
+ },
+ "recall": {
+  "v4": {
+   "companies": 300,
+   "families": {
+    "registry_identity": {
+     "companies_covered": 300,
+     "claims": 4733,
+     "facts": 4733
+    },
+    "contact": {
+     "companies_covered": 110,
+     "claims": 212,
+     "facts": 212
+    },
+    "people_roles": {
+     "companies_covered": 299,
+     "claims": 1438,
+     "facts": 1139
+    },
+    "locations": {
+     "companies_covered": 221,
+     "claims": 445,
+     "facts": 224
+    },
+    "financials": {
+     "companies_covered": 299,
+     "claims": 4267,
+     "facts": 3968
+    },
+    "workforce": {
+     "companies_covered": 43,
+     "claims": 43,
+     "facts": 43
+    },
+    "group": {
+     "companies_covered": 18,
+     "claims": 74,
+     "facts": 56
+    },
+    "website": {
+     "companies_covered": 23,
+     "claims": 23,
+     "facts": 23
+    },
+    "external_profiles": {
+     "companies_covered": 12,
+     "claims": 41,
+     "facts": 29
+    },
+    "jobs": {
+     "companies_covered": 3,
+     "claims": 6,
+     "facts": 3
+    },
+    "news_activity": {
+     "companies_covered": 13,
+     "claims": 56,
+     "facts": 68
+    }
+   }
+  },
+  "v5": {
+   "companies": 300,
+   "families": {
+    "registry_identity": {
+     "companies_covered": 300,
+     "claims": 4733,
+     "facts": 4733
+    },
+    "contact": {
+     "companies_covered": 110,
+     "claims": 212,
+     "facts": 212
+    },
+    "people_roles": {
+     "companies_covered": 299,
+     "claims": 1438,
+     "facts": 1139
+    },
+    "locations": {
+     "companies_covered": 221,
+     "claims": 445,
+     "facts": 224
+    },
+    "financials": {
+     "companies_covered": 299,
+     "claims": 4267,
+     "facts": 3968
+    },
+    "workforce": {
+     "companies_covered": 43,
+     "claims": 43,
+     "facts": 43
+    },
+    "group": {
+     "companies_covered": 18,
+     "claims": 74,
+     "facts": 56
+    },
+    "website": {
+     "companies_covered": 23,
+     "claims": 23,
+     "facts": 23
+    },
+    "external_profiles": {
+     "companies_covered": 11,
+     "claims": 36,
+     "facts": 25
+    },
+    "jobs": {
+     "companies_covered": 3,
+     "claims": 6,
+     "facts": 3
+    },
+    "news_activity": {
+     "companies_covered": 3,
+     "claims": 11,
+     "facts": 11
+    }
+   }
+  }
+ },
+ "counts": {
+  "v4": {
+   "news_links": 67,
+   "news_links_by_field": {
+    "dated_news": 45,
+    "company_activity": 22
+   },
+   "news_companies": 13,
+   "social_profile_links": 26,
+   "social_companies": 12,
+   "social_profiles_claims": {
+    "companies": 0,
+    "profiles": 0
+   }
+  },
+  "v5": {
+   "news_links": 11,
+   "news_links_by_field": {
+    "dated_news": 11,
+    "company_activity": 0
+   },
+   "news_companies": 3,
+   "social_profile_links": 22,
+   "social_companies": 11,
+   "social_profiles_claims": {
+    "companies": 11,
+    "profiles": 22
+   }
+  }
+ },
+ "links_v5": {
+  "published": {
+   "jobs": {
+    "high": 3,
+    "medium": 0,
+    "none": 0,
+    "companies": 3
+   },
+   "news": {
+    "high": 4,
+    "medium": 7,
+    "none": 0,
+    "companies": 3
+   },
+   "social": {
+    "high": 16,
+    "medium": 8,
+    "none": 0,
+    "companies": 11
+   },
+   "website": {
+    "high": 21,
+    "medium": 2,
+    "none": 0,
+    "companies": 23
+   }
+  },
+  "social_profiles": {
+   "companies": 11,
+   "profiles": 22,
+   "high": 14,
+   "medium": 8
+  },
+  "websites_by_method": {
+   "name_variant": 12,
+   "registry_email_domain": 2,
+   "registry_hjemmeside": 9
+  },
+  "candidates_not_published": {
+   "news": 24,
+   "social": 16
+  }
+ },
+ "news_dropped": [
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://jaeder.no/kyllingsalat-med-chipotle-dressing-syltet-rodlok-og-sprolok/",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://jaeder.no/kyllingfilet-gourmet-med-potetpure-rotgronnsaker-og-kremet-soppsaus/",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://jaeder.no/nyhet-kyllingfilet-gourmet-stor-pakke/",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://jaeder.no/nyhet-kyllingfilet-krydret-stor-pakke/",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://jaeder.no/crispy-chicken-burger/",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://jaeder.no/nyhet-homestyle-fried-chicken/",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://jaeder.no/var-redegjorelse-etter-apenhetsloven-2026/",
+   "v4_field": "dated_news",
+   "v5_reason": "not verified: article page not fetched (request cap) and the feed carries no article text"
+  },
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://jaeder.no/miljofyrtarn-rapport-for-2025/",
+   "v4_field": "dated_news",
+   "v5_reason": "not verified: article page not fetched (request cap) and the feed carries no article text"
+  },
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://jaeder.no/jaeder-konsernet-blir-majoritetseier-i-berika/",
+   "v4_field": "dated_news",
+   "v5_reason": "not verified: article page not fetched (request cap) and the feed carries no article text"
+  },
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://jaeder.no/double-cheese-chicago-style/",
+   "v4_field": "dated_news",
+   "v5_reason": "not verified: article page not fetched (request cap) and the feed carries no article text"
+  },
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://jaeder.no/kontakt/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://jaeder.no/aktuelt/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://jaeder.no/om-oss/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://jaeder.no/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "993842621",
+   "name": "DYNABYTE CONSULTING AS",
+   "url": "https://dynabyte.no/aktuelt/kollektiv_intelligens/",
+   "v4_field": "dated_news",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "993842621",
+   "name": "DYNABYTE CONSULTING AS",
+   "url": "https://dynabyte.no/aktuelt/anskaffer-du-et-hode-eller-et-fagmiljo/",
+   "v4_field": "dated_news",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "993842621",
+   "name": "DYNABYTE CONSULTING AS",
+   "url": "https://dynabyte.no/aktuelt/dfos-nye-veileder/",
+   "v4_field": "dated_news",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "993842621",
+   "name": "DYNABYTE CONSULTING AS",
+   "url": "https://dynabyte.no/aktuelt/samspill-ma-bygges-og-holdes-levende-gjennom-hele-prosjektet/",
+   "v4_field": "dated_news",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "993842621",
+   "name": "DYNABYTE CONSULTING AS",
+   "url": "https://dynabyte.no/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "971574844",
+   "name": "STIFTELSEN VÅR FRUE MENIGHETS SENIORBOLIGER",
+   "url": "https://vaarfrue.no/intranett-eksempel/",
+   "v4_field": "dated_news",
+   "v5_reason": "not an article: no news/blog/press path and no article markup"
+  },
+  {
+   "org": "971574844",
+   "name": "STIFTELSEN VÅR FRUE MENIGHETS SENIORBOLIGER",
+   "url": "https://vaarfrue.no/grilling-pa-takterassen/",
+   "v4_field": "dated_news",
+   "v5_reason": "not an article: no news/blog/press path and no article markup"
+  },
+  {
+   "org": "920702651",
+   "name": "VOLVER STUDIOS AS",
+   "url": "https://volverstudios.com/blogs/blogpost/vollsveien-2a-office-social-zones",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "920702651",
+   "name": "VOLVER STUDIOS AS",
+   "url": "https://volverstudios.com/blogs/blogpost/inc-co-working-office",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "920702651",
+   "name": "VOLVER STUDIOS AS",
+   "url": "https://volverstudios.com/blogs/blogpost/dynamic-brand-rugs-for-posten-bring",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "920702651",
+   "name": "VOLVER STUDIOS AS",
+   "url": "https://volverstudios.com/blogs/blogpost/high-performance-carpets-for-corporate-office",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "920702651",
+   "name": "VOLVER STUDIOS AS",
+   "url": "https://volverstudios.com/blogs/blogpost/the-colors-of-thought-artistic-rugs-for-corporate-office",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "920702651",
+   "name": "VOLVER STUDIOS AS",
+   "url": "https://volverstudios.com/blogs/blogpost/radisson-blu-plaza-hotel",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "920702651",
+   "name": "VOLVER STUDIOS AS",
+   "url": "https://volverstudios.com/blogs/blogpost",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "920702651",
+   "name": "VOLVER STUDIOS AS",
+   "url": "https://volverstudios.com/pages/meet-volver",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "920702651",
+   "name": "VOLVER STUDIOS AS",
+   "url": "https://volverstudios.com/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "984974493",
+   "name": "4TEST INSTRUMENT AS",
+   "url": "https://www.4test.no/Infos/Service/Newsletter-Maske.htm",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "819138672",
+   "name": "GASOLINI TRAFIKKSKOLE AS",
+   "url": "https://www.gasolinitrafikkskole.no/blogg",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "924465379",
+   "name": "STABINOR AS",
+   "url": "https://stabinor.no/2024/06/12/the-art-of-connection/",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "924465379",
+   "name": "STABINOR AS",
+   "url": "https://stabinor.no/2024/06/12/beyond-the-obstacle/",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "924465379",
+   "name": "STABINOR AS",
+   "url": "https://stabinor.no/2024/06/12/growth-unlocked/",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "924465379",
+   "name": "STABINOR AS",
+   "url": "https://stabinor.no/2024/06/12/collaboration-magic/",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "924465379",
+   "name": "STABINOR AS",
+   "url": "https://stabinor.no/2024/06/12/teamwork-triumphs/",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "924465379",
+   "name": "STABINOR AS",
+   "url": "https://stabinor.no/2024/06/12/adaptive-advantage/",
+   "v4_field": "dated_news",
+   "v5_reason": "the article text does not name the company (legal name or the verified site's brand)"
+  },
+  {
+   "org": "924465379",
+   "name": "STABINOR AS",
+   "url": "https://stabinor.no/kontakt/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "924465379",
+   "name": "STABINOR AS",
+   "url": "https://stabinor.no/om-oss-2/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "976430441",
+   "name": "NORWEGIAN SPA AS",
+   "url": "https://hotspring.no/2026/07/15/spabutikk-for-utendoersboblebad-hele-aaret/",
+   "v4_field": "dated_news",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "976430441",
+   "name": "NORWEGIAN SPA AS",
+   "url": "https://hotspring.no/2026/06/09/boblebad-eller-badestamp-hva-er-forskjellen/",
+   "v4_field": "dated_news",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "976430441",
+   "name": "NORWEGIAN SPA AS",
+   "url": "https://hotspring.no/2026/06/04/5-grunner-til-a-investere-i-massasjebad/",
+   "v4_field": "dated_news",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "976430441",
+   "name": "NORWEGIAN SPA AS",
+   "url": "https://hotspring.no/2026/05/22/spabutikk-for-utendoers-jacuzzi/",
+   "v4_field": "dated_news",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "976430441",
+   "name": "NORWEGIAN SPA AS",
+   "url": "https://hotspring.no/2026/05/12/spabad-med-ekte-spa-foelelse-hjemme/",
+   "v4_field": "dated_news",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "976430441",
+   "name": "NORWEGIAN SPA AS",
+   "url": "https://hotspring.no/2023/08/18/freshwater/",
+   "v4_field": "dated_news",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "976430441",
+   "name": "NORWEGIAN SPA AS",
+   "url": "https://hotspring.no/fa-pristilbud/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "976430441",
+   "name": "NORWEGIAN SPA AS",
+   "url": "https://hotspring.no/presse-media/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "976430441",
+   "name": "NORWEGIAN SPA AS",
+   "url": "https://hotspring.no/vare-butikker/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "976430441",
+   "name": "NORWEGIAN SPA AS",
+   "url": "https://hotspring.no/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "928745554",
+   "name": "NEELAM BEAUTY AS",
+   "url": "https://www.neelambeauty.no/blog",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "920478832",
+   "name": "KNATVOLD MASKIN AS",
+   "url": "https://knatvoldmaskin.no/kontakt/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "920478832",
+   "name": "KNATVOLD MASKIN AS",
+   "url": "https://knatvoldmaskin.no/om-oss/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "920478832",
+   "name": "KNATVOLD MASKIN AS",
+   "url": "https://knatvoldmaskin.no/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "928117545",
+   "name": "ALABASTER AS",
+   "url": "https://alabasterstudio.no/collections/news",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  },
+  {
+   "org": "979469241",
+   "name": "DEN NORSKE TURISTFORENING",
+   "url": "https://www.dnt.no/aktuelt/hytteslipp/",
+   "v4_field": "company_activity",
+   "v5_reason": "not a candidate in v5"
+  }
+ ],
+ "news_added": [],
+ "social_dropped": [
+  {
+   "org": "926765663",
+   "name": "PROSPECTUS MANAGEMENT AS",
+   "url": "https://linkedin.com/company/prospectus-management",
+   "v5_reason": "linked only from the page body, not from the site's header, footer or JSON-LD sameAs"
+  },
+  {
+   "org": "833598902",
+   "name": "JÆDER AS",
+   "url": "https://linkedin.com/company/j%C3%A6der-%C3%A5dne-espeland-as",
+   "v5_reason": "handle 'jæder-ådne-espeland-as' does not match the legal name (jaeder) or the verified site's brand (jaeder)"
+  },
+  {
+   "org": "928745554",
+   "name": "NEELAM BEAUTY AS",
+   "url": "https://facebook.com/neelambeauty",
+   "v5_reason": "linked only from the page body, not from the site's header, footer or JSON-LD sameAs"
+  },
+  {
+   "org": "928745554",
+   "name": "NEELAM BEAUTY AS",
+   "url": "https://instagram.com/neelam__beauty",
+   "v5_reason": "linked only from the page body, not from the site's header, footer or JSON-LD sameAs"
+  },
+  {
+   "org": "928117545",
+   "name": "ALABASTER AS",
+   "url": "https://facebook.com/alabasterstudiooslo",
+   "v5_reason": "handle 'alabasterstudiooslo' does not match the legal name (alabaster) or the verified site's brand (alabasterstudio)"
+  }
+ ],
+ "social_added": [
+  {
+   "org": "976430441",
+   "name": "NORWEGIAN SPA AS",
+   "url": "https://facebook.com/hotspring.no"
+  }
+ ],
+ "runs": {
+  "v4": {
+   "operations": {
+    "requests": 2447,
+    "bytes": 63158854,
+    "p50_ms": 199,
+    "p95_ms": 1690,
+    "requests_per_company": 8.16,
+    "projected_requests_for_1000": 8160,
+    "runtime_ms": 225999
+   },
+   "validation_passed": true,
+   "citation_problems": 0,
+   "state_problems": 0,
+   "site_ownership_problems": 0,
+   "withheld_by_check": 0
+  },
+  "v5": {
+   "operations": {
+    "requests": 2489,
+    "bytes": 70529497,
+    "p50_ms": 254,
+    "p95_ms": 1885,
+    "requests_per_company": 8.3,
+    "projected_requests_for_1000": 8300,
+    "runtime_ms": 252462
+   },
+   "validation_passed": true,
+   "citation_problems": 0,
+   "state_problems": 0,
+   "site_ownership_problems": 0,
+   "withheld_by_check": 0
+  }
+ }
+}

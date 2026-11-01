@@ -1,7 +1,7 @@
 {
-  "run_id": "local-v3-1000",
-  "started_at": "2026-10-20T13:16:05.924743Z",
-  "completed_at": "2026-10-20T13:34:44.115833Z",
+  "run_id": "local-v5-1000",
+  "started_at": "2026-11-01T19:19:03.901467Z",
+  "completed_at": "2026-11-01T19:28:24.677601Z",
   "expected_count": 1000,
   "emitted_envelopes": 1000,
   "resumed_profiles": 0,
@@ -35,49 +35,48 @@
     ]
   },
   "registry_download": {
-    "source": "cache",
-    "path": "cache/brreg-enheter.csv.gz",
-    "requests": 0,
-    "url": "https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv"
+    "source": "supplied",
+    "path": "/Users/macbook/Downloads/signalpost-entry/cache/brreg-enheter.csv.gz",
+    "requests": 0
   },
   "operations": {
-    "requests": 8269,
-    "bytes": 195002429,
-    "p50_ms": 186,
-    "p95_ms": 4159,
-    "requests_per_company": 8.27,
-    "projected_requests_for_1000": 8270,
-    "runtime_ms": 1084699
+    "requests": 8369,
+    "bytes": 252453119,
+    "p50_ms": 195,
+    "p95_ms": 1963,
+    "requests_per_company": 8.37,
+    "projected_requests_for_1000": 8370,
+    "runtime_ms": 573794
   },
   "budget": {
     "max_requests": null,
-    "deadline_minutes": 40.0,
+    "deadline_minutes": 120.0,
     "stopped_early": false
   },
   "wikidata": {
     "enabled": true,
     "status": "ok",
-    "indexed_organisations": 8,
-    "requests": 5,
-    "cached": false,
-    "retrieved_at": "2026-10-20T13:16:34.352396Z",
-    "content_sha256": "eb479b9234de220803e715f990c94fc7cacf8c1021b93d09fb875b828d92085e"
+    "indexed_organisations": 9,
+    "requests": 0,
+    "cached": true,
+    "retrieved_at": "2026-11-01T10:13:45.747755Z",
+    "content_sha256": "3d756a43b0ad83ec7f0d61cc7520122e47e6fb4f5b8431e5e8bff544960912e2"
   },
   "coverage": {
     "registry": 996,
     "accounting_obligation": 996,
     "registry_live": 1000,
     "financials": 996,
-    "roles": 996,
+    "roles": 995,
     "group": 66,
-    "locations": 1000,
-    "wikidata_footprint": 7,
-    "website": 117,
+    "locations": 754,
+    "wikidata_footprint": 8,
+    "website": 122,
     "workforce": 144,
-    "external_profiles": 36,
-    "company_activity": 32,
+    "external_profiles": 35,
+    "company_activity": 0,
     "company_jobs": 4,
-    "dated_news": 17
+    "dated_news": 12
   },
   "validation": {
     "passed": true,
@@ -88,23 +87,80 @@
       "all_module_states_terminal": true,
       "zero_silent_drops": true
     },
-    "invalid_states": []
+    "invalid_states": [],
+    "citations": {
+      "published_claims": 39107,
+      "claims_outside_the_six_contract_states": 0,
+      "published_claims_missing_hash": 0,
+      "published_claims_missing_span": 0,
+      "citation_problems": 0,
+      "state_problems": 0,
+      "site_ownership_problems": 0,
+      "examples": {},
+      "passed": true,
+      "withheld_by_check": [],
+      "uncited_withheld": []
+    }
+  },
+  "links": {
+    "published": {
+      "jobs": {
+        "high": 4,
+        "medium": 0,
+        "none": 0,
+        "companies": 4
+      },
+      "news": {
+        "high": 19,
+        "medium": 36,
+        "none": 0,
+        "companies": 12
+      },
+      "social": {
+        "high": 39,
+        "medium": 22,
+        "none": 0,
+        "companies": 35
+      },
+      "website": {
+        "high": 50,
+        "medium": 12,
+        "none": 0,
+        "companies": 62
+      }
+    },
+    "social_profiles": {
+      "companies": 33,
+      "profiles": 57,
+      "high": 35,
+      "medium": 22
+    },
+    "websites_by_method": {
+      "name_variant": 28,
+      "registry_email_domain": 4,
+      "registry_hjemmeside": 29,
+      "wikidata_p856": 1
+    },
+    "candidates_not_published": {
+      "news": 9,
+      "social": 39
+    }
   },
   "site": {
     "status": "ok",
-    "path": "out/run1000/site/index.html",
-    "run_id": "local-v3-1000",
-    "completed_at": "2026-10-20T13:34:44.115833Z",
+    "path": "/Users/macbook/Downloads/signalpost-entry/out/v5eval/run1000-site/index.html",
+    "run_id": "local-v5-1000",
+    "completed_at": "2026-11-01T19:28:24.677601Z",
     "companies": 1000,
     "company_pages": 1000,
     "with_summary": 1000,
-    "with_verified_website": 60,
-    "with_dated_news": 17,
+    "with_verified_website": 62,
+    "with_dated_news": 12,
     "entry": "index.html",
     "compare": "compare.html"
   },
   "synthesis": {
     "envelopes_with_summary": 1000,
-    "sentences": 9068
+    "sentences": 10049
   }
 }

@@ -85,7 +85,8 @@ def make_profile(index: int, *, records: list | None = None, website: bool = Fal
         ev["dated_news"] = evidence("dated_news", "available", "company_site_news", site + "feed/", value={"items": [
             {"title": title, "url": site + f"nyheter/{n}", "published_at": date, "source_kind": "rss", "source_url": site + "feed/",
              "content_sha256": "c" * 64, "retrieved_at": "2026-10-20T00:00:00Z", "company_match": {"verified_site": site},
-             "claim_span": f"<title>{title}</title> <pubDate>{date}</pubDate>"}
+             "claim_span": f"<title>{title}</title> <pubDate>{date}</pubDate>", "confidence": "high", "company_named": "legal_name",
+             "company_mention": f"{name} {title}", "article_evidence": "news/blog/press path", "date_from": "rss"}
             for n, (title, date) in enumerate(news)]})
     else:
         ev["dated_news"] = evidence("dated_news", "not_found", "company_site_news", site if website else BRREG)
@@ -170,7 +171,7 @@ def test_feed_parsing_requires_title_link_and_publication_date():
     assert [item["title"] for item in rss] == ["Ny fabrikk i dag", "Ekstern sak"]  # future and undated items dropped
     assert rss[0]["published_at"] == "2026-09-01"
     atom = parse_feed(ATOM, "https://firma.no/feed.atom", now=NOW)
-    assert atom == [{"title": "Publisert", "url": "https://firma.no/a", "published_at": "2026-07-01",  # updated-only skipped
+    assert atom == [{"title": "Publisert", "url": "https://firma.no/a", "published_at": "2026-07-01", "feed_text": "",  # updated-only skipped
                      "claim_span": "<title>Publisert</title> <published>2026-07-01T08:00:00Z</published>"}]
     children, news, plain = parse_sitemap(SITEMAP_NEWS, now=NOW)
     assert news == [{"title": "Sitemap-nyhet", "url": "https://firma.no/nyheter/x", "published_at": "2026-06-01",
@@ -195,8 +196,9 @@ def test_listing_and_article_metadata():
 
 
 def gated_profile(feed_links: list[str] | None = None, publishable: bool = True) -> dict:
-    return {"organisation_number": "923609016", "evidence": {"website": evidence("website", "available", "registry_linked_company_website",
-            "https://firma.no/", value={"final_url": "https://firma.no/", "feed_links": feed_links or [], "pages": [],
+    return {"organisation_number": "923609016", "name": "Firma AS", "evidence": {"website": evidence("website", "available", "registry_linked_company_website",
+            "https://firma.no/", value={"final_url": "https://firma.no/", "registered_domain": "firma.no", "feed_links": feed_links or [],
+                                        "block_hashes": ["0" * 16], "pages": [{"url": "https://firma.no/om-oss", "block_hashes": ["1" * 16]}],
                                         "identity_assessment": {"status": "exact" if publishable else "review", "publishable": publishable,
                                                                 "reasons": ["exact organisation number"]}})}}
 
@@ -211,11 +213,22 @@ def fake_fetcher(responses: dict[str, bytes], calls: list[str]):
     return fetch
 
 
+def article_html(title: str, date: str, text: str) -> bytes:
+    body = " ".join([text] + ["Prosjektet har pågått i flere år og involverer mange ansatte og samarbeidspartnere i regionen."] * 4)
+    return (f'<html><head><meta property="og:title" content="{title}"><meta property="og:type" content="article">'
+            f'<meta property="article:published_time" content="{date}"></head><body><header>Firma AS</header>'
+            f'<main><article><h1>{title}</h1><p>{body}</p></article></main><footer>Firma AS org.nr 923 609 016</footer></body></html>').encode()
+
+
 def test_dated_news_from_feed_keeps_only_exact_site_items_and_builds_claims():
     calls: list[str] = []
+    responses = {"https://firma.no/feed/": RSS,
+                 "https://firma.no/nyheter/fabrikk": article_html("Ny fabrikk i dag", "2026-09-01T10:00:00+02:00",
+                                                                  "Firma åpner en ny fabrikk på Raufoss i dag.")}
     record, metrics = fetch_dated_news(gated_profile(["https://firma.no/feed/", "https://cdn.other.no/feed"]),
-                                       fake_fetcher({"https://firma.no/feed/": RSS}, calls), now=NOW, sitemaps_for=lambda url: [])
-    assert record["status"] == "available" and calls == ["https://firma.no/feed/"] and metrics["requests"] == 1
+                                       fake_fetcher(responses, calls), now=NOW, sitemaps_for=lambda url: [])
+    assert record["status"] == "available" and calls == ["https://firma.no/feed/", "https://firma.no/nyheter/fabrikk"]
+    assert metrics["requests"] == 2
     items = record["value"]["items"]
     assert [item["url"] for item in items] == ["https://firma.no/nyheter/fabrikk"]  # annet.no item rejected
     assert items[0]["company_match"]["verified_site"] == "https://firma.no/"
@@ -227,7 +240,31 @@ def test_dated_news_from_feed_keeps_only_exact_site_items_and_builds_claims():
     assert news_claims[0]["value"] == {"title": "Ny fabrikk i dag", "url": "https://firma.no/nyheter/fabrikk",
                                        "published_at": "2026-09-01", "source_kind": "rss"}
     ev = next(item for item in env["evidence"] if item["id"] == news_claims[0]["evidence_ids"][0])
-    assert ev["item_url"] == "https://firma.no/nyheter/fabrikk" and ev["published_at"] == "2026-09-01" and ev["source_url"] == "https://firma.no/feed/"
+    # title and date are cited on the article page itself, which also names the company
+    assert ev["item_url"] == "https://firma.no/nyheter/fabrikk" and ev["published_at"] == "2026-09-01"
+    assert ev["source_url"] == "https://firma.no/nyheter/fabrikk"
+    assert items[0]["confidence"] == "high" and items[0]["company_named"] == "legal_name" and "Firma åpner" in items[0]["company_mention"]
+    assert news_claims[0]["confidence_level"] == "high"
+
+
+def test_dated_news_rejects_product_pages_undated_and_unnamed_articles():
+    feed = b"""<?xml version="1.0"?><rss version="2.0"><channel>
+<item><title>Ny modell lansert</title><link>https://firma.no/produkter/modell-x</link><pubDate>Tue, 01 Sep 2026 10:00:00 +0200</pubDate></item>
+<item><title>Kontakt oss</title><link>https://firma.no/kontakt/</link><pubDate>Tue, 01 Sep 2026 10:00:00 +0200</pubDate></item>
+<item><title>Oppskrift med kylling</title><link>https://firma.no/kylling-med-ris/</link><pubDate>Mon, 31 Aug 2026 10:00:00 +0200</pubDate></item>
+<item><title>Bransjen i endring</title><link>https://firma.no/nyheter/bransjen</link><pubDate>Sun, 30 Aug 2026 10:00:00 +0200</pubDate></item>
+</channel></rss>"""
+    calls: list[str] = []
+    responses = {"https://firma.no/feed/": feed,
+                 "https://firma.no/kylling-med-ris/": b"<html><head><title>Oppskrift</title></head><body><p>Kylling med ris.</p></body></html>",
+                 "https://firma.no/nyheter/bransjen": article_html("Bransjen i endring", "2026-08-30", "Mange leverandører merker endringene.")}
+    record, _ = fetch_dated_news(gated_profile(["https://firma.no/feed/"]), fake_fetcher(responses, calls), now=NOW, sitemaps_for=lambda url: [])
+    assert record["status"] == "not_found"
+    reasons = {item["url"]: item["reason"] for item in record["checked"]["not_published"]}
+    assert "not an article" in reasons["https://firma.no/produkter/modell-x"] and "not an article" in reasons["https://firma.no/kontakt/"]
+    assert reasons["https://firma.no/kylling-med-ris/"].startswith("not an article: no news/blog/press path")
+    assert "does not name the company" in reasons["https://firma.no/nyheter/bransjen"]
+    assert "https://firma.no/produkter/modell-x" not in calls  # rejected on its path, no request spent
 
 
 def test_dated_news_sitemap_fallback_and_request_cap():
@@ -238,12 +275,12 @@ def test_dated_news_sitemap_fallback_and_request_cap():
     responses = {"https://firma.no/sitemap.xml": index,
                  "https://firma.no/post-sitemap.xml": f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{posts}</urlset>'.encode()}
     for n in range(1, 9):
-        responses[f"https://firma.no/nyheter/sak-{n}"] = f'<h1>Sak nummer {n}</h1><meta property="article:published_time" content="2026-0{n}-01">'.encode()
+        responses[f"https://firma.no/nyheter/sak-{n}"] = article_html(f"Sak nummer {n}", f"2026-0{n}-01", f"Firma melder om sak {n}.")
     record, metrics = fetch_dated_news(gated_profile(), fake_fetcher(responses, calls), now=NOW, sitemaps_for=lambda url: [])
     assert metrics["requests"] <= MAX_REQUESTS and len(calls) <= MAX_REQUESTS
     assert calls[:2] == ["https://firma.no/sitemap.xml", "https://firma.no/post-sitemap.xml"]
     assert record["status"] == "available"
-    assert [item["title"] for item in record["value"]["items"]] == ["Sak nummer 8", "Sak nummer 7"]  # newest first
+    assert [item["title"] for item in record["value"]["items"]][:2] == ["Sak nummer 8", "Sak nummer 7"]  # newest first
     assert all(item["source_kind"] == "sitemap_article" for item in record["value"]["items"])
 
 

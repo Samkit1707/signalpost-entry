@@ -76,6 +76,68 @@ def _value(claim: dict[str, Any] | None) -> Any:
     return claim.get("value") if claim and claim.get("availability") == "available" else None
 
 
+def _pct(old: float, new: float) -> float | None:
+    return (new - old) / abs(old) * 100 if old else None
+
+
+def _result_phrase(old: float, new: float, currency: str) -> str:
+    if old == 0 or new == 0:
+        word = "broke even" if new == 0 else "moved from break-even"
+        return f"the annual result {word} ({money(old, currency)} → {money(new, currency)})"
+    if old > 0 and new > 0:
+        return f"the annual result {'rose' if new > old else 'fell' if new < old else 'was unchanged'} ({money(old, currency)} → {money(new, currency)})"
+    if old < 0 and new < 0:
+        return f"the loss {'narrowed' if new > old else 'widened' if new < old else 'was unchanged'} ({money(old, currency)} → {money(new, currency)})"
+    return ""
+
+
+def why_it_matters(latest: dict[str, Any], previous: dict[str, Any] | None) -> str:
+    """One sentence on what the year-on-year change means, from the two filed years' figures only (no forecast)."""
+    year = fiscal_year(latest)
+    currency = latest.get("currency") or "NOK"
+    if not previous:
+        return f"Why it matters: no year-on-year change can be judged, because FY{year} is the only filed year."
+    prev = fiscal_year(previous)
+    rev_old, rev_new = previous.get("revenue"), latest.get("revenue")
+    res_old, res_new = previous.get("annual_result"), latest.get("annual_result")
+    equity = latest.get("equity")
+    parts: list[str] = []
+    if res_old is not None and res_new is not None and res_old * res_new < 0:  # profit <-> loss (zero is break-even, not a flip)
+        parts.append(f"the company went from {'a profit' if res_old > 0 else 'a loss'} of {money(abs(res_old), currency)} in FY{prev} "
+                     f"to {'a loss' if res_new < 0 else 'a profit'} of {money(abs(res_new), currency)} in FY{year}, so FY{year} was "
+                     f"{'loss-making after a profitable year' if res_new < 0 else 'profitable after a loss-making year'}")
+    elif rev_old is not None and rev_new is not None and res_old is not None and res_new is not None and rev_old != rev_new:
+        pct = _pct(rev_old, rev_new)
+        size = f" ({pct:+.1f}%)" if pct is not None else ""
+        sales = f"revenue {'rose' if rev_new > rev_old else 'fell'}{size}"
+        result = _result_phrase(res_old, res_new, currency) or f"the annual result moved ({money(res_old, currency)} → {money(res_new, currency)})"
+        better = res_new > res_old
+        if (rev_new > rev_old) == better:
+            meaning = ("both revenue and the result grew" if better else "both revenue and the result shrank") if res_new != res_old \
+                else "the result held steady while revenue changed"
+        else:
+            gained = "lost less" if res_new < 0 else "earned more"
+            meaning = (f"it {gained} on lower revenue" if better else "higher revenue did not lift the result")
+        parts.append(f"{sales} {'and' if (rev_new > rev_old) == better else 'while'} {result}: {meaning}")
+    elif rev_old is not None and rev_new is not None and rev_old != rev_new:
+        pct = _pct(rev_old, rev_new)
+        if pct is not None and pct >= 100:
+            parts.append(f"revenue more than doubled ({money(rev_old, currency)} → {money(rev_new, currency)}), a step change in the size of the business")
+        elif pct is not None and pct <= -50:
+            parts.append(f"revenue more than halved ({money(rev_old, currency)} → {money(rev_new, currency)}), a sharp contraction of the business")
+        else:
+            parts.append(f"revenue {'rose' if rev_new > rev_old else 'fell'}{f' ({pct:+.1f}%)' if pct is not None else ''}; "
+                         "the annual result is not reported for both years, so the effect on profit is unknown")
+    elif res_old is not None and res_new is not None and res_old != res_new:
+        parts.append(f"{_result_phrase(res_old, res_new, currency)}; revenue is not reported for both years")
+    if equity is not None and equity < 0:
+        parts.append(f"equity was negative ({money(equity, currency)}) at the end of FY{year}, meaning reported liabilities exceeded reported assets")
+    if not parts:
+        return f"Why it matters: no year-on-year change can be judged, because FY{prev} and FY{year} do not both report revenue or annual result, or they are unchanged."
+    text = "; ".join(parts)
+    return f"Why it matters (FY{prev} → FY{year}): {text[0].upper()}{text[1:]}."
+
+
 def build_synthesis(profile: dict[str, Any], claims: list[dict[str, Any]], evidence_list: list[dict[str, Any]]) -> dict[str, Any]:
     known_ids = {item["id"] for item in evidence_list}
     sentences: list[dict[str, Any]] = []
@@ -184,8 +246,13 @@ def build_synthesis(profile: dict[str, Any], claims: list[dict[str, Any]], evide
                 say("unknown", f"No financial trend is stated: FY{prev_year} and FY{year} do not both report revenue or annual result.", financial_claim)
         else:
             say("unknown", f"Only one filed year (FY{year}) is available, so no financial trend is stated.", financial_claim)
+        years = {year, fiscal_year(previous) if previous else None} - {None}
+        figures = [claim for claim in claims if claim.get("field") in {"annual_revenue", "annual_result", "equity"}
+                   and claim.get("availability") == "available" and str((claim.get("value") or {}).get("fiscal_year")) in years]
+        say("why_it_matters", why_it_matters(latest, previous), financial_claim, *figures)
     elif financial_claim:
         say("financials", "No annual accounts were returned by the Accounts Register for this organisation number.", financial_claim)
+        say("why_it_matters", "Why it matters: no year-on-year change can be judged, because no filed annual accounts were returned.", financial_claim)
 
     status_claim = _first(claims, "registry_status")
     status = _value(status_claim) or {}
@@ -219,5 +286,6 @@ def build_synthesis(profile: dict[str, Any], claims: list[dict[str, Any]], evide
             say("unknown", f"Could not be checked this run ({label}): {', '.join(fields)}.", *failed)
 
     narrative = " ".join(f"{item['text']} [{', '.join(item['evidence_ids'])}]" for item in sentences)
-    return {"method": "template_from_claims_v1", "sentences": sentences, "narrative": narrative,
+    why = next((item["text"] for item in sentences if item["topic"] == "why_it_matters"), None)
+    return {"method": "template_from_claims_v2", "sentences": sentences, "narrative": narrative, "why_it_matters": why,
             "latest_fiscal_year": fiscal_year(latest) if latest else None}

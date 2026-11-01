@@ -68,3 +68,11 @@ Records may carry `checked` (what a not-found check looked at; never a value). A
 not the company's own carries `quarantined` (counts of dropped items). Claims the
 citation check rejects are withheld in place (`ambiguous`/`not_available`, `value: null`, `note`) and logged in
 `citation_withheld` and in the run report's `validation.citations`. The check never fails a run or drops an envelope.
+
+v5: link claims (`official_website`, `external_profile(s)`, `social_profiles`, `dated_news`, `company_activity`,
+`careers_page`, `job_posting`, `company_jobs`, `group_website`, `site_*`) carry `confidence_level` (`high`/`medium`),
+numeric `confidence` (0.95/0.8) and `proof`; `official_website` also carries `discovery_method`. A link without a level
+is `not_available` with a note. `external_profiles` and `dated_news` claims may carry `not_published`
+(`[{url, reason, …}]`, candidates that failed the rule; never a value). New field `social_profiles`: the
+`external_profiles` value restricted to social platforms, each entry `{platform, url, confidence, proof}`, same evidence.
+Synthesis topics add `why_it_matters`; method `template_from_claims_v2`.

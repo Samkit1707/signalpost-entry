@@ -9,6 +9,14 @@ Sources, in order, all on the verified site's registered domain and all behind r
 Every item has a title, a direct URL, a publication date (never a modification date, never inferred) and the
 exact-company proof: it is published on the site that passed the identity gate for this organisation number.
 No site, or a site that did not pass the gate, yields `not_found` and zero requests.
+
+v5: a candidate is published only when all three hold (each checked on the article page itself, fetched once):
+(a) it is an article: a news/blog/press path or article markup (og:type article, JSON-LD Article/NewsArticle/
+    BlogPosting), and never a contact/about/product/services page;
+(b) it has a publication date the article, feed or sitemap declares;
+(c) the article's main text (not the site footer) names the company: the legal name, or the verified site's brand.
+Each item gets `confidence` (high: news path, legal name, and the date; medium: brand only or article markup only).
+Candidates that fail are listed in `not_published` with the reason.
 """
 from __future__ import annotations
 
@@ -30,10 +38,15 @@ from .evidence import evidence, utc_now
 from .politeness import host_slot
 
 MODULE = "dated_news"
-MAX_REQUESTS = 4
+MAX_REQUESTS = 10
 MAX_ITEMS = 10
+MAX_ARTICLE_CHECKS = 6  # article pages fetched to verify candidates (newest first)
 FEED_MAX_BYTES = 1_000_000
 NEWS_PATH_TERMS = ("nyhet", "news", "aktuelt", "presse", "press", "artikkel", "artikler", "article", "blogg", "blog", "post")
+# Path segments that make a page something other than an article (checked on every segment but an article slug).
+NOT_ARTICLE_TERMS = ("kontakt", "contact", "om-oss", "om_oss", "omoss", "about", "produkt", "product", "tjenester", "tjeneste",
+                     "services", "service", "tag", "kategori", "category", "shop", "butikk", "nettbutikk", "priser", "pristilbud", "fa-pristilbud")
+ARTICLE_TYPES = {"article", "newsarticle", "blogposting", "pressrelease", "reportagenewsarticle", "analysisnewsarticle", "techarticle"}
 _ISO_DATE = re.compile(r"((?:19|20)\d{2})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])")
 INTERPRETATION = ("News the company publishes on its own identity-verified website. Dates are the publication "
                   "dates the feed, sitemap or article declares; modification dates are not used.")
@@ -117,8 +130,10 @@ def parse_feed(body: bytes, feed_url: str, *, now: datetime | None = None) -> li
             date_tag = "pubDate" if _text(_child(node, "pubdate")) else "dc:date"
         date = parse_date(published, now=now)
         url = urllib.parse.urljoin(feed_url, link.strip()) if link else ""
+        body = next((item for item in node if _local(item.tag) in {"encoded", "content", "description", "summary"} and "".join(item.itertext()).strip()), None)
+        text = " ".join(BeautifulSoup("".join(body.itertext()), "lxml").get_text(" ").split())[:5000] if body is not None else ""
         if title and url and date:
-            items.append({"title": title, "url": url, "published_at": date,
+            items.append({"title": title, "url": url, "published_at": date, "feed_text": text,
                           "claim_span": f"<title>{title}</title> <{date_tag}>{published}</{date_tag}>"})
     return items
 
@@ -231,6 +246,120 @@ def feed_links(base_url: str, soup: BeautifulSoup) -> list[str]:
     return links[:3]
 
 
+def not_article_reason(url: str) -> str | None:
+    """Why a URL is not an article page (contact/about/product/services/listing path), or None."""
+    segments = [part.casefold() for part in urllib.parse.unquote(urllib.parse.urlparse(url).path).split("/") if part]
+    if not segments:
+        return "the site's homepage, not an article"
+    checked = segments if len(segments) == 1 else segments[:-1]  # the last of several segments is the article's own slug
+    for segment in checked:
+        term = next((term for term in NOT_ARTICLE_TERMS if segment == term or segment.startswith(term + "-") or segment.startswith(term + "_")
+                     or (term in {"kontakt", "contact", "produkt", "product", "tjeneste"} and segment.startswith(term))), None)
+        if term:
+            return f"a {term} page, not an article"
+    return None
+
+
+def article_markup(html_text: str) -> str | None:
+    """'og:type article' or 'JSON-LD <type>' when the page marks itself up as an article."""
+    soup = BeautifulSoup(html_text, "lxml")
+    node = soup.select_one('meta[property="og:type"]')
+    if node and str(node.get("content") or "").strip().casefold() == "article":
+        return "og:type article"
+    for script in soup.select('script[type="application/ld+json"]'):
+        for kind in re.findall(r'"@type"\s*:\s*(?:\[\s*)?"([A-Za-z]+)"', script.get_text() or ""):
+            if kind.casefold() in ARTICLE_TYPES:
+                return f"JSON-LD {kind}"
+    return None
+
+
+def article_text(html_text: str, url: str) -> str:
+    """The article's main text without header, footer and navigation (trafilatura, precision mode)."""
+    import trafilatura
+
+    return trafilatura.extract(html_text, url=url, include_links=False, include_tables=False, favor_precision=True) or ""
+
+
+def company_mention(text: str, legal_words: list[str], brands: list[str]) -> tuple[str | None, str]:
+    """('legal_name' | 'brand' | None, quote): the company named in `text` as its legal name (word sequence, legal form
+    optional) or as the verified site's brand (one word, or two adjacent words written together)."""
+    from .identity import _fold
+
+    tokens = [(match.start(), match.end(), _fold(match.group(0))) for match in re.finditer(r"[^\W_]+", text or "")]
+    tokens = [(start, end, "".join(re.findall(r"[a-z0-9]+", folded))) for start, end, folded in tokens]
+    tokens = [token for token in tokens if token[2]]
+
+    def quote(start: int, end: int) -> str:
+        return " ".join(text[max(0, start - 60):end + 60].split())
+
+    if legal_words:
+        size = len(legal_words)
+        for index in range(len(tokens) - size + 1):
+            if [token[2] for token in tokens[index:index + size]] == legal_words:
+                return "legal_name", quote(tokens[index][0], tokens[index + size - 1][1])
+        joined = "".join(legal_words)
+        if len(joined) >= 5:
+            for index, token in enumerate(tokens):
+                pair = token[2] + (tokens[index + 1][2] if index + 1 < len(tokens) else "")
+                if token[2] == joined or pair == joined:
+                    return "legal_name", quote(token[0], (tokens[index + 1] if pair == joined and token[2] != joined else token)[1])
+    for brand in brands:
+        if len(brand) < 4:
+            continue
+        for index, token in enumerate(tokens):
+            pair = token[2] + (tokens[index + 1][2] if index + 1 < len(tokens) else "")
+            if token[2] == brand or pair == brand:
+                return "brand", quote(token[0], (tokens[index + 1] if pair == brand and token[2] != brand else token)[1])
+    return None, ""
+
+
+BLOCK_TAGS = ["p", "li", "div", "section", "aside", "footer", "header", "address", "blockquote", "td", "span",
+              "h1", "h2", "h3", "h4", "h5", "h6"]
+MAX_BLOCK_HASHES = 600
+
+
+def block_hash(text: str) -> str:
+    return hashlib.sha256(" ".join(str(text).split()).casefold().encode("utf-8")).hexdigest()[:16]
+
+
+def text_block_hashes(soup: BeautifulSoup) -> list[str]:
+    """Hashes of every visible text block (paragraph, list item, sidebar, footer) on a page, so an article's
+    naming paragraph can be checked against the rest of the site without storing the pages' full text."""
+    hashes: dict[str, None] = {}
+    for node in soup.find_all(BLOCK_TAGS):
+        if node.find_parent(["script", "style", "noscript", "template"]):
+            continue
+        text = node.get_text(" ", strip=True)
+        if len(text) >= 20:
+            hashes[block_hash(text)] = None
+        if len(hashes) >= MAX_BLOCK_HASHES:
+            break
+    return list(hashes)
+
+
+def _page_key(url: str | None) -> str:
+    parsed = urllib.parse.urlparse(str(url or ""))
+    return parsed.netloc.casefold().removeprefix("www.") + parsed.path.rstrip("/")
+
+
+def unrepeated_mention(text: str, legal_words: list[str], brands: list[str], url: str | None,
+                       site_pages: list[tuple[str | None, set[str]]]) -> tuple[str | None, str, dict[str, Any]]:
+    """The company named in a paragraph of the article body that is not boilerplate, i.e. not the same text block
+    repeated on 2+ other pages of the site. Returns (kind, quote, check)."""
+    others = [hashes for page_url, hashes in site_pages if _page_key(page_url) != _page_key(url)]
+    repeated = 0
+    for paragraph in [part for part in str(text or "").split("\n") if part.strip()]:
+        named, quote = company_mention(paragraph, legal_words, brands)
+        if not named:
+            continue
+        pages = sum(1 for hashes in others if block_hash(paragraph) in hashes)
+        if pages >= 2:
+            repeated += 1
+            continue
+        return named, quote, {"other_pages_compared": len(others), "naming_block_on_other_pages": pages}
+    return None, "", {"other_pages_compared": len(others), "boilerplate_mentions": repeated}
+
+
 def _default_fetch(url: str, *, timeout: float = 15.0, max_bytes: int = FEED_MAX_BYTES) -> dict[str, Any]:
     """One robots-checked GET through the per-host slot. Returns body, final URL, sha256 and request count."""
     from .website import SAFE_OPENER, USER_AGENT, _robots_allowed, assert_public_url, robots_cached
@@ -323,7 +452,7 @@ def fetch_dated_news(
             if not entry.get("claim_span") or not source.get("content_sha256"):
                 continue  # every item is cited exactly (title and date as the source states them) or not at all
             items[url] = {"title": entry["title"], "url": url, "published_at": entry["published_at"], "source_kind": kind,
-                          "claim_span": entry["claim_span"],
+                          "claim_span": entry["claim_span"], "_feed_text": entry.get("feed_text") or "", "_page": entry.get("_page"),
                           "source_url": source["url"], "content_sha256": source.get("content_sha256"),
                           "retrieved_at": source.get("retrieved_at") or website.get("retrieved_at"),
                           "company_match": company_match}
@@ -373,16 +502,91 @@ def fetch_dated_news(
                 article_span: dict[str, str] = {}
                 title, date = article_metadata(page["body"].decode("utf-8", errors="replace"), now=now, spans=article_span)
                 if title and date:
-                    add([{"title": title, "url": page["final_url"], "published_at": date, "claim_span": article_span.get("claim_span")}], "sitemap_article",
+                    add([{"title": title, "url": page["final_url"], "published_at": date, "claim_span": article_span.get("claim_span"),
+                          "_page": page}], "sitemap_article",
                         {"url": page["final_url"], "content_sha256": page["content_sha256"], "retrieved_at": page["retrieved_at"]})
 
-    ordered = sorted(items.values(), key=lambda item: item["published_at"], reverse=True)[:MAX_ITEMS]
+    # 4. Verify every candidate on its own article page: an article, a publication date, and the company named.
+    from .identity import full_legal_name_words, site_brands
+
+    legal_words = full_legal_name_words(profile.get("name"))
+    brands = site_brands(value)
+    site_pages = [(page.get("final_url") or page.get("url"), set(page.get("block_hashes") or []))
+                  for page in [value, *(value.get("pages") or [])] if page.get("block_hashes")]
+    candidates, ordered, not_published = [], [], []
+    checks = 0
+    for item in sorted(items.values(), key=lambda item: item["published_at"], reverse=True):
+        if len(candidates) >= MAX_ITEMS + MAX_ARTICLE_CHECKS:
+            not_published.append({"title": item["title"], "url": item["url"], "reason": "not checked: older than the newest items checked on this site"})
+            continue
+        reason = not_article_reason(item["url"])
+        page = item.pop("_page", None)
+        feed_text = item.pop("_feed_text", "")
+        if reason is None and page is None:
+            if checks < MAX_ARTICLE_CHECKS and metrics["requests"] < MAX_REQUESTS:
+                checks += 1
+                page = get(item["url"])
+                if page and not_article_reason(page["final_url"]):
+                    reason = "redirected to " + str(not_article_reason(page["final_url"]))
+            elif not (_newsy(item["url"]) and feed_text):
+                reason = "not verified: article page not fetched (request cap) and the feed carries no article text"
+        markup, page_date, text = None, None, feed_text
+        if page and reason is None:
+            html_text = page["body"].decode("utf-8", errors="replace")
+            soup = BeautifulSoup(html_text, "lxml")
+            site_pages.append((page["final_url"], set(text_block_hashes(soup))))
+            markup = article_markup(html_text)
+            spans: dict[str, str] = {}
+            title, page_date = article_metadata(html_text, now=now, spans=spans)
+            text = article_text(html_text, page["final_url"]) or feed_text
+            if page_date and title and spans.get("claim_span"):
+                # the article's own title and publication date, cited on the article page
+                item.update({"title": title, "published_at": page_date, "claim_span": spans["claim_span"], "source_url": page["final_url"],
+                             "content_sha256": page["content_sha256"], "retrieved_at": page["retrieved_at"]})
+        candidates.append((item, reason, markup, page_date, text))
+    # judged once every article page is in, so a block repeated across articles is seen as boilerplate
+    for item, reason, markup, page_date, text in candidates:
+        if len(ordered) >= MAX_ITEMS:
+            not_published.append({"title": item["title"], "url": item["url"], "reason": f"not checked: only the newest {MAX_ITEMS} items are published"})
+            continue
+        newsy = _newsy(item["url"])
+        if reason is None and not (newsy or markup):
+            reason = "not an article: no news/blog/press path and no article markup"
+        if reason is None and not item.get("published_at"):
+            reason = "no publication date on the article, feed or sitemap"
+        named, mention, block_check = (unrepeated_mention(text, legal_words, brands, item["url"], site_pages)
+                                       if reason is None else (None, "", {}))
+        if reason is None and not named:
+            reason = ("the only text naming the company is a block repeated on 2+ other pages of the site (boilerplate)"
+                      if block_check.get("boilerplate_mentions") else
+                      "the article text does not name the company (legal name or the verified site's brand)")
+        if reason:
+            not_published.append({"title": item["title"], "url": item["url"], "reason": reason})
+            continue
+        compared = block_check["other_pages_compared"] >= 2
+        confidence = "high" if newsy and named == "legal_name" and compared else "medium"
+        item.update({"confidence": confidence, "company_named": named, "company_mention": mention,
+                     "boilerplate_check": block_check,
+                     "article_evidence": markup or "news/blog/press path",
+                     "date_from": "article page" if page_date else item["source_kind"],
+                     "confidence_reason": ("news path, legal name in the article body (not a block repeated on other pages), "
+                                           "declared publication date" if confidence == "high"
+                                           else f"{'brand' if named == 'brand' else 'legal name'} in the article body; "
+                                                f"{'news path' if newsy else markup}; declared publication date"
+                                                + ("" if compared else "; fewer than 2 other site pages to rule out boilerplate"))})
+        ordered.append(item)
+    ordered.sort(key=lambda item: item["published_at"], reverse=True)
     if not ordered:
+        note = "Verified site checked (feed, news page, sitemap); no dated news item with title and publication date"
+        if not_published:
+            note = f"Verified site checked; {len(not_published)} candidate(s) failed the article rule (article, publication date, names the company)"
         return evidence(MODULE, "not_found", "company_site_news", site_url, retrieved_at=website.get("retrieved_at"),
-                        content_sha256=value.get("content_sha256"), checked={"sources_checked": checked, "verified_site": site_url},
-                        note="Verified site checked (feed, news page, sitemap); no dated news item with title and publication date"), metrics
+                        content_sha256=value.get("content_sha256"),
+                        checked={"sources_checked": checked, "verified_site": site_url, "not_published": not_published[:20]},
+                        note=note), metrics
     first = ordered[0]
     return evidence(MODULE, "available", "company_site_news", first["source_url"],
                     value={"items": ordered, "latest_published_at": first["published_at"], "sources_checked": checked,
+                           "not_published": not_published[:20],
                            "verified_site": site_url, "interpretation": INTERPRETATION},
                     as_of=first["published_at"], retrieved_at=first["retrieved_at"], content_sha256=first["content_sha256"]), metrics

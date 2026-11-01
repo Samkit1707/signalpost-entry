@@ -415,37 +415,107 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def assess_social_identity(profile: dict[str, Any], link: dict[str, str]) -> dict[str, Any]:
+# v5: where on the company's own page a profile link may sit to count as the company's own profile.
+OWN_PROFILE_LOCATIONS = {"footer", "header", "jsonld_same_as"}
+# Words a handle may add to the company or brand name ("jaeder.as", "kontorlev.no", "fiskeeksportnorge").
+HANDLE_SUFFIXES = {"as", "asa", "no", "norge", "norway", "official", "offisiell", "the"}
+# Path segments that are a platform's own words, not the company's handle.
+HANDLE_PREFIXES = {"company", "channel", "user", "c", "pages", "pg", "people"}
+
+
+def handle_slug(url: str) -> str:
+    """The company-chosen part of a profile URL ('linkedin.com/company/jaeder-as' -> 'jaeder-as'); '' for numeric ids."""
+    parsed = urllib.parse.urlparse(url or "")
+    parts = [part for part in urllib.parse.unquote(parsed.path).split("/") if part]
+    if "facebook." in parsed.netloc.casefold() and len(parts) > 1 and parts[0] == "p":
+        parts = parts[1:]  # Facebook's newer page URLs: facebook.com/p/Page-Name-100034744493193 (on Instagram /p/ is a post)
+    while parts and parts[0].casefold() in HANDLE_PREFIXES and len(parts) > 1:
+        parts = parts[1:]
+    slug = (parts[0] if parts else "").lstrip("@")
+    slug = re.sub(r"(?<=[^\W\d_])-\d{8,}$", "", slug)  # Facebook's 'Page-Name-1159100470769905': the name, then the page id
+    if not slug or re.fullmatch(r"[\d_\-]+", slug) or re.fullmatch(r"UC[\w-]{20,}", slug):
+        return ""  # numeric page id or YouTube channel id: nothing the company named
+    return slug
+
+
+def _compact_variants(text: str) -> set[str]:
+    """Folded alphanumerics (ø -> o, æ -> ae), plus the variant where non-ASCII letters were dropped, as LinkedIn
+    does when it builds a slug ('høgskole' -> 'h-gskole')."""
+    folded = "".join(re.findall(r"[a-z0-9]+", _fold(text)))
+    dropped = "".join(re.findall(r"[a-z0-9]+", str(text or "").casefold().encode("ascii", "ignore").decode()))
+    return {variant for variant in (folded, dropped) if variant}
+
+
+def _segments(text: str, words: set[str]) -> list[str] | None:
+    """Split `text` fully into `words` (longest first); None when some part is not one of them."""
+    best: dict[int, list[str] | None] = {len(text): []}
+    for start in range(len(text) - 1, -1, -1):
+        best[start] = None
+        for word in sorted(words, key=len, reverse=True):
+            if word and text.startswith(word, start) and best.get(start + len(word)) is not None:
+                best[start] = [word, *best[start + len(word)]]
+                break
+    return best[0]
+
+
+def site_brands(value: dict[str, Any] | None) -> list[str]:
+    """The brand the verified site itself shows: its registered-domain label ('kontorlev' for kontorlev.no)."""
+    domain = str((value or {}).get("registered_domain") or "")
+    label = domain.split(".")[0] if domain else ""
+    compact = "".join(re.findall(r"[a-z0-9]+", _fold(label)))
+    return [compact] if len(compact) >= 3 and not compact.isdigit() else []
+
+
+def assess_social_identity(profile: dict[str, Any], link: dict[str, str], brands: list[str] | None = None) -> dict[str, Any]:
+    """A profile linked from the company's own site is the company's when its handle is the legal name or the site's
+    brand (high), or is made only of legal-name words and the brand with at least one distinctive word (medium).
+    Anything else, a numeric id, or a link outside the page header/footer/JSON-LD sameAs is not published."""
+    from .domain_guess import GENERIC_LABEL_TOKENS  # domain_guess imports this module
+
     core = _tokens(profile.get("name"))
-    parsed = urllib.parse.urlparse(link.get("url") or "")
-    handle_text = urllib.parse.unquote(parsed.path)
-    handle_compact = "".join(_tokens(handle_text))
-    matched = [token for token in core if token in handle_compact]
     core_compact = "".join(core)
-    ratio = len(set(matched)) / len(set(core)) if core else 0.0
-    if core_compact and core_compact in handle_compact:
-        score = 0.98
-        reason = "normalized legal-name sequence appears in the social handle"
-    elif len(core) == 1 and matched:
-        score = 0.95
-        reason = "single distinctive legal-name token appears in the social handle"
-    elif ratio >= 0.75 and len(set(matched)) >= 2:
-        score = 0.9
-        reason = "most legal-name tokens appear in the social handle"
+    slug = handle_slug(link.get("url") or "")
+    location = link.get("location")
+    brands = [brand for brand in brands or [] if brand]
+    confidence, reason, parts = None, "", None
+    if location is not None and location not in OWN_PROFILE_LOCATIONS:
+        reason = f"linked only from the page {location.replace('_', ' ')}, not from the site's header, footer or JSON-LD sameAs"
+    elif not slug:
+        reason = "profile URL carries only a numeric or channel id, so the handle cannot be matched to the company"
     else:
-        score = 0.3
-        reason = "social handle lacks strong exact-entity name evidence"
+        dropped_name = "".join(token for token in re.findall(r"[a-z0-9]+", str(profile.get("name") or "").casefold().encode("ascii", "ignore").decode())
+                               if token not in LEGAL_AND_GENERIC and len(token) > 1)
+        legal_names = {core_compact, dropped_name} - {""}
+        for handle in _compact_variants(slug):
+            exact = legal_names | set(brands)
+            for name in sorted(exact, key=len, reverse=True):
+                if handle == name or (handle.startswith(name) and _segments(handle[len(name):], HANDLE_SUFFIXES) is not None):
+                    which = "legal name" if name in legal_names else "verified site's brand (domain)"
+                    confidence, reason = "high", f"handle '{slug}' is the {which}"
+                    break
+            if confidence:
+                break
+            words = {*core, *brands}
+            parts = _segments(handle, words | HANDLE_SUFFIXES)
+            distinctive = [part for part in parts or [] if part in words and part not in GENERIC_LABEL_TOKENS and len(part) >= 4]
+            if parts and distinctive:
+                confidence, reason = "medium", f"handle '{slug}' is made only of legal-name words and the site's brand ({', '.join(parts)})"
+                break
+        if not confidence:
+            reason = f"handle '{slug}' does not match the legal name ({' '.join(core) or 'none'}) or the verified site's brand ({', '.join(brands) or 'none'})"
+    score = {"high": 0.98, "medium": 0.9}.get(confidence or "", 0.3)
     return {
         **link,
         "identity_score": score,
-        "publishable": score >= 0.9,
-        "matched_tokens": matched,
+        "publishable": confidence is not None,
+        "confidence": confidence,
+        "matched_tokens": [part for part in parts or [] if part in core] if parts else [token for token in core if token in "".join(_compact_variants(slug))],
         "reason": reason,
-        "method": "deterministic_social_handle_identity_v1",
+        "method": "social_handle_matches_name_or_site_brand_v2",
     }
 
 
-LINK_KEYS = ("platform", "url", "page_url", "content_sha256", "raw")
+LINK_KEYS = ("platform", "url", "page_url", "content_sha256", "raw", "location", "confidence", "reason")
 
 
 def link_with_provenance(item: dict[str, Any]) -> dict[str, Any]:
@@ -461,7 +531,7 @@ def apply_website_identity_gate(profile: dict[str, Any], website: dict[str, Any]
     value["identity_assessment"] = assessment
     original = list(value.get("discovered_social_links") or value.get("social_links") or [])
     value["discovered_social_links"] = original
-    social_assessments = [assess_social_identity(profile, link) for link in original]
+    social_assessments = [assess_social_identity(profile, link, site_brands(value)) for link in original]
     value["social_link_assessments"] = social_assessments
     value["social_links"] = [
         link_with_provenance(item)

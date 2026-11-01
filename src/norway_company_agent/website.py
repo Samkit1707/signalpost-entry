@@ -19,7 +19,7 @@ import tldextract
 import trafilatura
 
 from .evidence import evidence
-from .news import feed_links, news_listing_items
+from .news import feed_links, news_listing_items, text_block_hashes
 from .politeness import host_slot
 
 USER_AGENT = "builderr-signalpost-poc/0.1 (+https://builderr.ai)"
@@ -138,12 +138,33 @@ def raw_attribute(html_text: str | None, name: str, value: str) -> str:
     return f'{name}="{value}"'
 
 
+_REGION_HINT = re.compile(r"(?:^|[\s_-])(footer|header|masthead|colophon)(?:$|[\s_-])", re.I)
+
+
+def link_location(node: Any) -> str:
+    """Where a link sits: 'footer' or 'header' (semantic element, or a container whose id/class says so), else 'body'."""
+    for parent in node.parents:
+        name = getattr(parent, "name", None)
+        if name in {"footer", "header"}:
+            return name
+        if name in {"body", "html", None}:
+            break
+        hint = " ".join([str(parent.get("id") or ""), *[str(item) for item in parent.get("class") or []], str(parent.get("role") or "")])
+        match = _REGION_HINT.search(hint)
+        if match or "contentinfo" in hint or "banner" == str(parent.get("role") or ""):
+            word = (match.group(1).casefold() if match else "footer" if "contentinfo" in hint else "header")
+            return "footer" if word in {"footer", "colophon"} else "header"
+    return "body"
+
+
 def _social_links(base_url: str, soup: BeautifulSoup, html_text: str | None = None, page_sha256: str | None = None) -> list[dict[str, str]]:
     found: dict[tuple[str, str], dict[str, str]] = {}
-    candidates = [("href", str(node.get("href") or "")) for node in soup.select("a[href]")]
-    candidates.extend(("data-href", str(node.get("data-href") or "")) for node in soup.select("[data-href]"))
-    candidates.extend(("src", str(node.get("src") or "")) for node in soup.select("iframe[src]"))
-    for attribute, candidate in candidates:
+    candidates = [("href", str(node.get("href") or ""), link_location(node)) for node in soup.select("a[href]")]
+    candidates.extend(("data-href", str(node.get("data-href") or ""), link_location(node) + "_embed") for node in soup.select("[data-href]"))
+    candidates.extend(("src", str(node.get("src") or ""), link_location(node) + "_embed") for node in soup.select("iframe[src]"))
+    # a profile linked both from the body and the footer counts as linked from the footer
+    candidates.sort(key=lambda item: item[2] not in {"footer", "header"})
+    for attribute, candidate, location in candidates:
         url = urllib.parse.urljoin(base_url, candidate)
         parsed_candidate = urllib.parse.urlparse(url)
         if (parsed_candidate.hostname or "").casefold().removeprefix("www.") == "facebook.com" and parsed_candidate.path.startswith("/plugins/"):
@@ -154,7 +175,8 @@ def _social_links(base_url: str, soup: BeautifulSoup, html_text: str | None = No
         if not normalized:
             continue
         found.setdefault((normalized["platform"], normalized["url"]), {
-            **normalized, "page_url": base_url, "content_sha256": page_sha256, "raw": raw_attribute(html_text, attribute, candidate)})
+            **normalized, "page_url": base_url, "content_sha256": page_sha256, "raw": raw_attribute(html_text, attribute, candidate),
+            "location": location})
     return sorted(found.values(), key=lambda item: (item["platform"], item["url"]))
 
 
@@ -171,7 +193,8 @@ def structured_social_links(value: Any, page_url: str | None = None, page_sha256
                 normalized = normalize_social_url(raw.strip())
                 if normalized:
                     found.setdefault((normalized["platform"], normalized["url"]), {
-                        **normalized, "page_url": page_url, "content_sha256": page_sha256, "raw": f"JSON-LD sameAs={json.dumps(raw, ensure_ascii=False)}"})
+                        **normalized, "page_url": page_url, "content_sha256": page_sha256, "raw": f"JSON-LD sameAs={json.dumps(raw, ensure_ascii=False)}",
+                        "location": "jsonld_same_as"})
             for child in node.values():
                 walk(child)
         elif isinstance(node, list):
@@ -431,6 +454,8 @@ def job_postings(structured: dict[str, Any] | None) -> list[dict[str, Any]]:
                     "date_posted": str(value.get("datePosted") or "")[:40] or None,
                     "valid_through": str(value.get("validThrough") or "")[:40] or None,
                     "employment_type": value.get("employmentType"),
+                    "hiring_organization": (value.get("hiringOrganization") or {}).get("name")
+                    if isinstance(value.get("hiringOrganization"), dict) else value.get("hiringOrganization") if isinstance(value.get("hiringOrganization"), str) else None,
                 })
             for child in value.values():
                 walk(child)
@@ -472,6 +497,7 @@ def _fetch_secondary_page(url: str, *, homepage_domain: str, timeout: float, max
             "url": final_url,
             "title": page_title,
             "main_text_excerpt": page_text[:5000],
+            "block_hashes": text_block_hashes(page_soup),
             "content_sha256": page_sha256,
             "category": page_category(final_url, page_title),
             "identity_text_excerpt": identity_excerpt(page_soup),
@@ -568,6 +594,7 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
             "title": title[:500],
             "description": description[:2000],
             "main_text_excerpt": text[:5000],
+            "block_hashes": text_block_hashes(soup),
             "social_links": _social_links(final_url, soup, html, homepage_sha256),
             "structured_organisations": _jsonld_organisations(structured),
             "content_sha256": homepage_sha256,
@@ -579,7 +606,8 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
             "feed_links": feed_links(final_url, soup),
             "news_items": news_listing_items(final_url, soup, articles_only=True),
         }
-        pages = [{"url": final_url, "title": title[:500], "main_text_excerpt": text[:5000], "content_sha256": value["content_sha256"]}]
+        pages = [{"url": final_url, "title": title[:500], "main_text_excerpt": text[:5000], "content_sha256": value["content_sha256"],
+                  "block_hashes": value["block_hashes"]}]
         social = value["social_links"]
         crawl_errors = []
         requests = 2
@@ -614,9 +642,9 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
         value["site_contact"] = _merge_contact(site_contact(final_url, soup, value["structured_organisations"], html_text=html,
                                                             page_sha256=homepage_sha256),
                                                [page.get("site_contact") or {} for page in pages[1:]])
-        # first source of each profile wins (homepage before secondary pages)
+        # first source of each profile wins (homepage before secondary pages), a header/footer/sameAs link before a body link
         merged_social: dict[tuple[str, str], dict[str, Any]] = {}
-        for item in social:
+        for item in sorted(social, key=lambda item: item.get("location") not in {"footer", "header", "jsonld_same_as"}):
             merged_social.setdefault((item["platform"], item["url"]), item)
         value["social_links"] = list(merged_social.values())
         value["crawl_errors"] = crawl_errors

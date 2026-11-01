@@ -8,6 +8,7 @@ import trafilatura
 from bs4 import BeautifulSoup
 
 from .evidence import evidence, utc_now
+from .news import text_block_hashes
 from .website import _extraction_state, _jsonld_organisations, _registered_domain, _social_links, normalize_homepage, structured_social_links
 
 
@@ -55,6 +56,7 @@ def extract_page_event(
         "title": title,
         "description": description,
         "main_text_excerpt": text[:5000],
+        "block_hashes": text_block_hashes(soup),
         "identity_text_excerpt": identity_text,
         "social_links": _social_links(final_url, soup),
         "extraction_state": _extraction_state(text, soup),
@@ -139,6 +141,7 @@ def merge_profile_events(profile: dict[str, Any], events: list[dict[str, Any]]) 
             "url": item.get("final_url"),
             "title": item.get("title") or "",
             "main_text_excerpt": item.get("main_text_excerpt") or "",
+            "block_hashes": item.get("block_hashes") or [],
             "identity_text_excerpt": item.get("identity_text_excerpt") or "",
             "content_sha256": item.get("content_sha256"),
         }
@@ -152,6 +155,7 @@ def merge_profile_events(profile: dict[str, Any], events: list[dict[str, Any]]) 
         "title": homepage.get("title") or "",
         "description": homepage.get("description") or "",
         "main_text_excerpt": homepage.get("main_text_excerpt") or "",
+        "block_hashes": homepage.get("block_hashes") or [],
         "identity_text_excerpt": homepage.get("identity_text_excerpt") or "",
         "social_links": list(social.values()),
         "structured_organisations": homepage.get("structured_organisations") or [],

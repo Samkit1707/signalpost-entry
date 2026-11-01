@@ -219,9 +219,9 @@ def test_site_contact_and_job_postings_become_fact_claims_only_on_verified_sites
                              "sources": {"email:post@testfirma3.no": {"page_url": site, "content_sha256": "b" * 64, "raw": 'href="mailto:post@testfirma3.no"'},
                                          "phone:22334455": {"page_url": site, "content_sha256": "b" * 64, "raw": 'href="tel:22334455"'}}}
     profile["evidence"]["company_jobs"] = evidence("company_jobs", "available", "company_site_careers", "https://testfirma3.no/jobb", value={
-        "careers_pages": [{"url": "https://testfirma3.no/jobb", "title": "Jobb", "content_sha256": "8" * 64, "claim_span": "Jobb"}],
+        "careers_pages": [{"url": "https://testfirma3.no/jobb", "title": "Jobb", "content_sha256": "8" * 64, "claim_span": "Jobb", "confidence": "high"}],
         "job_postings": [{"title": "Utvikler", "date_posted": "2026-10-01", "source_url": "https://testfirma3.no/jobb", "content_sha256": "8" * 64,
-                          "claim_span": 'JSON-LD JobPosting.title="Utvikler"; JobPosting.datePosted="2026-10-01"'}]})
+                          "claim_span": 'JSON-LD JobPosting.title="Utvikler"; JobPosting.datePosted="2026-10-01"', "confidence": "medium"}]})
     env = envelope(profile)
     assert [c["value"] for c in facts(env, "site_address")] == ["Gate 3, 0150 Oslo"]
     assert [c["value"] for c in facts(env, "site_email")] == ["post@testfirma3.no"]

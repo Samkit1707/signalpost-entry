@@ -291,3 +291,47 @@ resolve but never answer sat at the 15 s timeout and set p95 at 6–8 s.
 
 Measurement, v3 (15974f5) vs v4 on the same 300 companies and snapshot: `submission/v4-compare-300.json` and
 `submission/recall-300-v4.json` (`scripts/compare_v4.py`, `scripts/measure_recall.py`).
+
+### v5 of this entry: confidence on every link, stricter news, social profiles that show
+
+**Confidence on every link** (`confidence.py`, `contract.label_link_claims`). Every published website, social profile,
+news item, careers page, job posting and site contact detail carries `confidence_level` (`high` or `medium`), a matching
+numeric `confidence` (0.95 / 0.8) and a `proof` ("linked from https://conow.no/ footer", "JSON-LD sameAs on …",
+"the site prints this organisation number"). The website claim also carries `discovery_method` (`registry_hjemmeside`,
+`registry_email_domain`, `wikidata_p856`, `name_variant`, `subunit_name`). A link whose confidence cannot be established
+is not published: the claim becomes `not_available` with a note. Candidates that were found but failed a rule are
+listed on the family's claim as `not_published` (URL and reason, never a value). The run report has a `links` section:
+published links per family and level, websites per discovery method, candidates not published.
+
+**News** (`news.py`, `enrichment.company_activity_record`). A news item or activity article is published only if:
+1. it is an article: a news/blog/press/artikkel/nyheter path or article markup (`og:type article`, JSON-LD Article
+   types), never a contact/about/product/services/listing page;
+2. it has a publication date from the article page, feed or sitemap (modification dates are not used);
+3. a paragraph of the article body names the company (legal name, or the verified site's brand of 4+ characters), and
+   that paragraph is not boilerplate: the same text block on 2+ other pages of the site does not count. Pages store
+   hashes of their visible text blocks (`block_hashes`) for this check.
+
+High confidence needs a news path, the legal name and at least 2 other site pages to compare against; anything else
+that passes is medium. In v4 the contact and product links came from `company_activity`, which published any crawled
+page with a declared date.
+
+**Social profiles** (`identity.assess_social_identity`, `website._social_links`). Facebook, LinkedIn, Instagram,
+YouTube, X and TikTok links count only from the verified site's header, footer or JSON-LD `sameAs`, or from the exact
+Wikidata item (P2333). Platforms are never fetched. A handle is high when it equals the legal name or the site's brand
+(registered-domain label), optionally with a suffix such as `as`, `norge`, `official`. It is medium when it is made
+only of legal-name words, the brand and such suffixes, with at least one distinctive word. Numeric ids, YouTube `UC…`
+channel ids, people's handles and handles with other words (another branch or region) are rejected. LinkedIn slugs that
+drop ø/æ/å and Facebook's `Name-<page id>` URLs are handled. Profiles are published as `external_profile` (one claim
+each) and `external_profiles` as before, and also as **`social_profiles`**: the same links with confidence and proof,
+social platforms only. Company pages show each profile as a clickable link with its confidence and proof.
+
+**Websites.** The Wikidata P856 website is now tried when the registry-listed site exists but does not pass the identity
+gate. Email-domain and name-variant discovery record why each candidate failed (`note` in the discovery trail).
+
+**Synthesis.** A `why_it_matters` sentence per company, built only from the two filed years' cited revenue, result and
+equity ("Revenue fell (-43.9%) while the loss narrowed: it lost less on lower revenue"). With one filed year it says
+no change can be judged. No forecasts.
+
+Measurement, v4 (c194d02) vs v5 on the same 300 companies, snapshot and day: `submission/v5-compare-300.json`
+(`scripts/compare_v5.py`). Hand-check page for 60 never-run companies: `submission/audit-v5.html`
+(`scripts/build_audit_v5.py`).

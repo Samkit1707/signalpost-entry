@@ -83,8 +83,15 @@ def gated_profile() -> dict:
         "pages": [
             {"url": "https://firma.no/", "title": "Firma AS", "content_sha256": "b" * 64},
             {"url": "https://firma.no/nyheter/ny-avtale", "title": "Ny avtale", "category": "news",
-             "declared_dates": ["2026-09-12"], "declared_date_spans": {"2026-09-12": '<time datetime="2026-09-12">'},
-             "job_postings": [], "content_sha256": "c" * 64},
+             "declared_dates": ["2026-09-12"],
+             "declared_date_spans": {"2026-09-12": '<meta property="article:published_time" content="2026-09-12T08:00:00+02:00">'},
+             "main_text_excerpt": "Firma har signert en ny avtale med kommunen.", "job_postings": [], "content_sha256": "c" * 64},
+            {"url": "https://firma.no/kontakt/", "title": "Kontakt", "category": "identity",
+             "declared_dates": ["2026-10-01"], "declared_date_spans": {"2026-10-01": '<meta property="article:published_time" content="2026-10-01">'},
+             "main_text_excerpt": "Kontakt Firma AS", "job_postings": [], "content_sha256": "f" * 64},
+            {"url": "https://firma.no/nyheter/oppdatert", "title": "Oppdatert", "category": "news",
+             "declared_dates": ["2026-10-02"], "declared_date_spans": {"2026-10-02": 'JSON-LD dateModified="2026-10-02"'},
+             "main_text_excerpt": "Firma AS oppdaterer", "job_postings": [], "content_sha256": "9" * 64},
             {"url": "https://firma.no/karriere", "title": "Karriere", "category": "careers",
              "declared_dates": [], "job_postings": [{"title": "Lagermedarbeider", "date_posted": "2026-10-01"}],
              "content_sha256": "d" * 64},
@@ -100,6 +107,10 @@ def test_enrichment_records_from_gated_site():
     assert workforce_record(profile)["value"]["registered_employees"] == 12
     activity = company_activity_record(profile)
     assert activity["status"] == "available" and activity["value"]["latest_declared_date"] == "2026-09-12"
+    assert [item["url"] for item in activity["value"]["items"]] == ["https://firma.no/nyheter/ny-avtale"]
+    reasons = {item["url"]: item["reason"] for item in activity["value"]["not_published"]}
+    assert "not an article" in reasons["https://firma.no/kontakt/"]
+    assert "modification dates are not used" in reasons["https://firma.no/nyheter/oppdatert"]
     jobs = company_jobs_record(profile)
     assert jobs["status"] == "available" and jobs["value"]["open_postings_found"] == 1
     wiki = {"status": "available", "retrieved_at": "t", "content_sha256": "a" * 64, "value": {
@@ -201,7 +212,7 @@ def test_batch_end_to_end_offline_with_budget(tmp_path, monkeypatch):
     first = envelopes[0]["profile"]["evidence"]
     assert first["website"]["value"]["identity_assessment"]["publishable"] is True
     assert first["external_profiles"]["status"] == "available"
-    assert first["company_activity"]["status"] == "available"
+    assert first["company_activity"]["status"] == "not_found"  # a dated homepage is not an article (v5 rule)
     assert report["site"]["status"] == "ok" and (out / "site" / "index.html").exists()
     states = {module["state"] for env in envelopes for module in env["modules"].values()}
     assert states <= {"complete", "not_found", "not_applicable", "budget_exhausted", "source_error", "blocked_policy", "blocked_robots"}

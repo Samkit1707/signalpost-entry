@@ -132,7 +132,7 @@ def expected(field: str, value: Any, organisation_number: str = "", legal_name: 
         need["tokens"] = _tokens(_handle(item.get("item")))
     elif field == "external_profile":
         need["tokens"] = _tokens(_handle(item.get("url")))
-    elif field == "external_profiles":
+    elif field in {"external_profiles", "social_profiles"}:
         need["tokens"] = [token for entry in value or [] for token in _tokens(_handle(entry.get("url")))]
     elif field == "careers_page":
         need["tokens"] = _text_terms(item.get("title")) or _tokens(urllib.parse.urlparse(str(item.get("url"))).path)
@@ -235,7 +235,7 @@ def envelope_problems(envelope: dict[str, Any]) -> dict[str, list[dict[str, Any]
         if published and spans and not span_supports(claim["field"], value, spans, str(org or ""), legal_name):
             flag("citation", claim, "span_does_not_contain_value", evidence_ids=ids)
         if published and not owned and (claim.get("field") in SITE_DERIVED or (
-                claim.get("field") in {"external_profile", "external_profiles"}
+                claim.get("field") in {"external_profile", "external_profiles", "social_profiles"}
                 and any("wikidata" not in str((evidence.get(i) or {}).get("source_url") or "") for i in ids))):
             flag("site_ownership", claim, "claim_from_site_that_is_not_the_companys_own")
     for module, record in (profile.get("evidence") or {}).items():
