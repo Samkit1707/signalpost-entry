@@ -16,6 +16,7 @@ DISCOVERY_METHODS = {
     "wikidata_linked_company_website": "wikidata_p856",
     "registry_email_domain_candidate": "registry_email_domain",
     "name_derived_domain_candidate": "name_variant",
+    "subunit_registry_website_candidate": "subunit_registry_website",
 }
 
 
@@ -63,7 +64,7 @@ def proof_text(link: dict[str, Any]) -> str:
     location = link.get("location")
     if location == "jsonld_same_as":
         return f"JSON-LD sameAs on {page}"
-    return f"linked from {page} {location or 'page'}".strip()
+    return f"linked from {page} {str(location or 'page').replace('_', ' ')}".strip()
 
 
 # claim field -> link family in the run report

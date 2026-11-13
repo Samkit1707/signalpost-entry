@@ -391,3 +391,29 @@ Same 100 unseen companies as `submission/audit-v6.html`, same day: websites 9 �
 items 4 → 13, careers/jobs 0 → 1, no link lost; 914 → 1,248 requests, p95 3.9 → 4.0 s. Hand-check page with only the
 new links and their org-number lines: `submission/audit-coverage.html` (`scripts/build_audit_coverage.py`), 19/19
 checked correct by the owner.
+
+### Coverage: more verified news, job postings, sub-unit sites, socials from contact pages
+
+Identity rules unchanged: every external link needs the exact org number or the registry's own website entry, and the
+envelope carries only verified material.
+
+- **News** (`news.py`): besides the feed and the news page, archive pages of the news listing (next page / `/arkiv`, with
+  `?page=2` as a fallback) and the sitemap's news/blog URLs are read whenever fewer than 10 dated candidates are known;
+  up to 10 articles are checked per site. An item counts as news only if a directory of its URL path is a news/blog
+  section (`nytt`, `nyheter`, `nyhet`, `news`, `blog`, `blogg`, `artikler`, `artikkel`, `aktuelt`, `innblikk`, `presse`,
+  `press`, `journal`, `post`, `posts`, `innlegg`, `arkiv`) or, outside such a section, the page declares JSON-LD
+  `NewsArticle` or `BlogPosting`; and the publication-date and company-name rules pass. A generic JSON-LD `Article` (which
+  CMSs add to every post) counts only under a news/blog section, and `og:type article` alone never counts.
+- **Job postings** (`website.careers_listing_items`, `website.fetch_ats_list`): each ad on the verified site's careers page,
+  and each ad on the company's list page on a recruiting system linked from the verified site (Teamtailor, Webcruiter,
+  Recman, Jobylon, ReachMee, FINN, …), is its own `job_posting` claim with title, URL and the dates the page labels
+  (`Publisert` → `published_date`, `Søknadsfrist` → `valid_through`; unlabelled dates are not used). The careers page stays a
+  separate `careers_page` claim with `open_postings`.
+- **Sub-unit websites** (`official.normalize_locations`, `domain_guess.subunit_registry_domains`): a sub-unit's registry
+  `hjemmeside` is tried as a candidate for the parent and published only if it prints the parent's exact org number. It is
+  labelled on the sub-unit's `registered_location` claim only when it is the same domain as the company's verified website;
+  any other sub-unit site goes to the diagnostics file (`subunit_sites_not_labelled`), never the envelope.
+- **Social profiles**: links in the body of the verified site's own contact/about pages count too (`contact_page`), under
+  the same handle-match rules and vendor blocklist.
+
+Hand-check page with only the new links: `submission/audit-coverage2.html` (`scripts/build_audit_coverage.py`).

@@ -14,8 +14,9 @@ import re
 from pathlib import Path
 
 TYPES = {"official_website": "WEBSITE", "external_profile": "SOCIAL", "dated_news": "NEWS", "careers_page": "CAREERS",
-         "job_posting": "JOB"}
-FAMILY = {"WEBSITE": "websites", "SOCIAL": "socials", "NEWS": "news", "CAREERS": "jobs", "JOB": "jobs"}
+         "job_posting": "JOB", "registered_location": "SUBUNIT-SITE"}
+FAMILY = {"WEBSITE": "websites", "SOCIAL": "socials", "NEWS": "news", "CAREERS": "careers pages", "JOB": "job postings",
+          "SUBUNIT-SITE": "sub-unit site labels"}
 
 
 def esc(value: object) -> str:
@@ -34,6 +35,10 @@ def links(envelope: dict) -> list[dict]:
             continue
         value = claim.get("value")
         url = value if isinstance(value, str) else (value or {}).get("url")
+        if claim["field"] == "registered_location":
+            url = (value or {}).get("subunit_website")
+            if not url:
+                continue
         ev = evidence.get((claim.get("evidence_ids") or [None])[0]) or {}
         out.append({"type": TYPES[claim["field"]], "url": url, "span": " ".join(str(ev.get("claim_span") or "").split()),
                     "source": ev.get("source_url"), "method": claim.get("discovery_method"), "proof": claim.get("proof")})
@@ -79,7 +84,7 @@ def main() -> None:
     reports = {label: json.loads(Path(path).read_text()) for label, path in (("before", args.before_report), ("after", args.after_report))
                if path and Path(path).exists()}
     ops = {label: report.get("operations") or {} for label, report in reports.items()}
-    families = ("websites", "socials", "news", "jobs")
+    families = ("websites", "socials", "news", "careers pages", "job postings", "sub-unit site labels")
     table = "".join(f"<tr><td>{family}</td><td>{counts['before'].get(family, 0)}</td><td>{counts['after'].get(family, 0)}</td></tr>"
                     for family in families)
     if ops:
@@ -109,10 +114,11 @@ a{{color:var(--accent);word-break:break-all}}.muted{{color:var(--muted)}}.small{
 button{{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:8px;padding:4px 10px;cursor:pointer}}
 .row.right{{border-color:var(--ok)}}.row.wrong{{border-color:var(--bad)}}.bar{{position:sticky;top:0;background:var(--bg);padding:8px 0;border-bottom:1px solid var(--line)}}
 @media (max-width:640px){{.row{{grid-template-columns:1fr}}}}</style></head><body><main>
-<h1>Coverage audit: new links only</h1>
+<h1>{esc(Path(args.output).stem.replace("-", " ").capitalize())}: new links only</h1>
 <p class="muted">Same 100 unseen companies as the last audit. Base = commit on main before this update, new = working tree, same day.
 Only links the new run publishes and the base run did not are listed. Websites are proven by the exact org number; the quote
-is the line that printed it.</p>
+is the line that printed it. SUBUNIT-SITE rows are labels on the sub-unit's location claim (its registry website entry),
+not the company's website.</p>
 <table><tr><th></th><th>before</th><th>after</th></tr>{table}</table>
 <div class="bar"><b id="tally"></b></div>{body or '<p>No new links.</p>'}
 </main><script>

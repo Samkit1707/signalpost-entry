@@ -16,6 +16,15 @@ p50 267 ms, p95 3,546 ms, 151 s, 3,796 published claims, 0 problems, 10 retries.
 the update adds on the same 100 unseen companies as `audit-v6.html` (websites 9 → 13, social profiles 12 → 17, news 4 → 13,
 careers 0 → 1, none lost), each website with the line that prints its org number; checked by hand by the owner: 19/19 correct.
 
+**Coverage update (more verified news, job postings, sub-unit sites, socials from contact pages).** The smoke files,
+`site/`, `tests.txt` and `fresh-clone-check.txt` above are now from this update: smoke 100/100, validation passed, 1,220
+requests, p50 273 ms, p95 3,596 ms, 168 s, 3,794 published claims, 0 problems. On the same 100 unseen companies as
+`audit-v6.html` (`audit-coverage2.html`): websites 13, social profiles 17, news 13 and careers pages 1, unchanged; 7
+sub-unit locations now carry their registry website, each the same domain as the company's verified site; 5 other
+sub-unit sites stay in the diagnostics file. News now needs a news/blog section in the URL (or JSON-LD NewsArticle /
+BlogPosting at a root-level slug): on the smoke batch 9 items are kept and 8 root-level posts with only a generic Article
+type drop.
+
 The v5 evidence below is kept for reference (its smoke files and site were replaced by v6's).
 
 ## v5 evidence (2 Nov)

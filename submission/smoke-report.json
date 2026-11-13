@@ -1,7 +1,7 @@
 {
-  "run_id": "smoke-100-coverage",
-  "started_at": "2026-11-13T20:06:59.033339Z",
-  "completed_at": "2026-11-13T20:09:26.582287Z",
+  "run_id": "smoke-100-coverage2",
+  "started_at": "2026-11-13T21:08:55.568774Z",
+  "completed_at": "2026-11-13T21:11:40.327244Z",
   "expected_count": 100,
   "emitted_envelopes": 100,
   "resumed_profiles": 0,
@@ -35,13 +35,13 @@
     "requests": 0
   },
   "operations": {
-    "requests": 1208,
-    "bytes": 48997307,
-    "p50_ms": 267,
-    "p95_ms": 3546,
-    "requests_per_company": 12.08,
-    "projected_requests_for_1000": 12080,
-    "runtime_ms": 151337
+    "requests": 1220,
+    "bytes": 51243345,
+    "p50_ms": 273,
+    "p95_ms": 3596,
+    "requests_per_company": 12.2,
+    "projected_requests_for_1000": 12200,
+    "runtime_ms": 168338
   },
   "budget": {
     "max_requests": null,
@@ -52,9 +52,9 @@
     "enabled": true,
     "status": "ok",
     "indexed_organisations": 1,
-    "requests": 1,
-    "cached": false,
-    "retrieved_at": "2026-11-13T20:07:23.128590Z",
+    "requests": 0,
+    "cached": true,
+    "retrieved_at": "2026-11-13T21:05:03.023585Z",
     "content_sha256": "e4fb8cf085da969b99a4309d7cf12fae7dbfad221e699e7498bb7f72b31edd52"
   },
   "coverage": {
@@ -71,7 +71,7 @@
     "external_profiles": 2,
     "company_activity": 0,
     "company_jobs": 0,
-    "dated_news": 2
+    "dated_news": 1
   },
   "validation": {
     "passed": true,
@@ -84,7 +84,7 @@
     },
     "invalid_states": [],
     "citations": {
-      "published_claims": 3796,
+      "published_claims": 3794,
       "claims_outside_the_six_contract_states": 0,
       "published_claims_missing_hash": 0,
       "published_claims_missing_span": 0,
@@ -100,10 +100,10 @@
   "links": {
     "published": {
       "news": {
-        "high": 0,
-        "medium": 11,
+        "high": 9,
+        "medium": 0,
         "none": 0,
-        "companies": 2
+        "companies": 1
       },
       "social": {
         "high": 3,
@@ -131,7 +131,7 @@
     "candidates_not_published": {}
   },
   "retries": {
-    "website_pages_retried_once": 10,
+    "website_pages_retried_once": 11,
     "rule": "one retry on HTTP 429/503 (Retry-After <= 10 s) or a timeout"
   },
   "link_guard": {
@@ -234,27 +234,27 @@
       },
       {
         "organisation_number": "827340162",
-        "path": "claims[56].value.identity_proof",
+        "path": "claims[52].value.identity_proof",
         "text": "novooi.no"
       }
     ],
-    "diagnostics_file": "out/cov-smoke/envelopes.diagnostics.jsonl"
+    "diagnostics_file": "out/c2-final/smoke/envelopes.diagnostics.jsonl"
   },
   "site": {
     "status": "ok",
-    "path": "out/cov-smoke/site/index.html",
-    "run_id": "smoke-100-coverage",
-    "completed_at": "2026-11-13T20:09:26.582287Z",
+    "path": "out/c2-final/smoke/site/index.html",
+    "run_id": "smoke-100-coverage2",
+    "completed_at": "2026-11-13T21:11:40.327244Z",
     "companies": 100,
     "company_pages": 100,
     "with_summary": 100,
     "with_verified_website": 6,
-    "with_dated_news": 2,
+    "with_dated_news": 1,
     "entry": "index.html",
     "compare": "compare.html"
   },
   "synthesis": {
     "envelopes_with_summary": 100,
-    "sentences": 1100
+    "sentences": 1099
   }
 }

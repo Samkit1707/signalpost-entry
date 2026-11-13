@@ -180,6 +180,11 @@ def location_facts(value: dict[str, Any]) -> list[Fact]:
                     "address": _address_text(item.get("address")), "municipality": (item.get("address") or {}).get("kommune"),
                     "nace_code": industry.get("kode"), "nace_description": industry.get("beskrivelse"),
                     "employees": item.get("employees"), "start_date": item.get("start_date")}
+        if item.get("website"):
+            # the sub-unit's own website entry in the registry; only present when it is the company's verified site
+            location["subunit_website"] = item["website"]
+            location["subunit_website_note"] = ("the sub-unit's own website entry in the Brønnøysund register; the same "
+                                                 "domain as the company's verified website")
         facts.append(("registered_location", location, item.get("claim_span"), item.get("start_date")))
     return facts
 

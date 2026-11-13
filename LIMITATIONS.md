@@ -29,3 +29,8 @@
   embeds a JobPosting date. Quotes in evidence may show "[unverified link withheld]" where a page named another domain.
 - Org-number proof pages: at most 6 pages per site; a number printed only in an image or a PDF is not seen. A page that
   prints another 9-digit number next to ours (a data processor's org number, for example) does not count as proof.
+- News needs a news/blog section in the URL, or JSON-LD NewsArticle/BlogPosting at a root-level slug: dated posts at
+  root-level slugs with only a generic JSON-LD Article are not counted. Articles without a machine-readable publication date
+  (only a date in the visible text) are not counted.
+- Recruiting systems that render their ad list with JavaScript only (no links in the HTML) yield no job postings.
+- A sub-unit's registry website that is not the company's verified website is not published or labelled.

@@ -144,6 +144,21 @@ def subunit_labels(profile: dict[str, Any]) -> list[str]:
     return labels[:2]
 
 
+def subunit_registry_domains(profile: dict[str, Any]) -> list[str]:
+    """Hosts of the websites registered for the company's sub-units (underenheter): the parent's candidate only if
+    the site prints the parent's exact organisation number."""
+    import urllib.parse
+    domains: list[str] = []
+    for item in (((profile.get("evidence") or {}).get("locations") or {}).get("value") or {}).get("locations") or []:
+        raw = str(item.get("website") or "").strip()
+        if not raw:
+            continue
+        host = (urllib.parse.urlparse(raw if "://" in raw else "https://" + raw).hostname or "").casefold().removeprefix("www.")
+        if host and "." in host and host not in domains:
+            domains.append(host)
+    return domains[:2]
+
+
 def website_candidates(profile: dict[str, Any], tried: set[str] | None = None) -> list[dict[str, str]]:
     """Ordered candidates after the registry website and Wikidata: e-mail domain, name variants (.no), sub-unit
     names (.no), then the name variants on .com."""
@@ -157,6 +172,8 @@ def website_candidates(profile: dict[str, Any], tried: set[str] | None = None) -
     email_domain = registry_email_domain(profile)
     if email_domain:
         add(email_domain, "registry_email_domain")
+    for domain in subunit_registry_domains(profile):
+        add(domain, "subunit_registry_website")
     labels = name_labels(profile.get("name"))
     for label in labels:
         add(f"{label}.no", "name_variant")
@@ -207,12 +224,13 @@ def discover_website(profile: dict[str, Any], fetch, gate, *, resolver=resolves,
             trail.append({"candidate": domain, "method": method, "result": "no_dns"})
             continue
         fetches += 1
-        source_type = "registry_email_domain_candidate" if method == "registry_email_domain" else "name_derived_domain_candidate"
+        source_type = {"registry_email_domain": "registry_email_domain_candidate",
+                       "subunit_registry_website": "subunit_registry_website_candidate"}.get(method, "name_derived_domain_candidate")
         # https only: an http:// fallback recovered fetches on the 300 sample but proved no site and doubled p95.
         # A guessed host that resolves but does not answer within PROBE_TIMEOUT is not worth the run's p95
         # (on the smoke batch such hosts sat at the 15 s socket timeout and set p95 at 6-8 s).
         record, fetched = fetch("https://" + host + "/", source_type=source_type, probe=True,
-                                probe_terms=None if method == "registry_email_domain" else terms, timeout=PROBE_TIMEOUT,
+                                probe_terms=None if method in {"registry_email_domain", "subunit_registry_website"} else terms, timeout=PROBE_TIMEOUT,
                                 proof_org=str(profile.get("organisation_number") or "") or None)
         spend(fetched)
         gated = gate(profile, record)

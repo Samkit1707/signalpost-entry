@@ -187,13 +187,15 @@ def normalize_locations(body: Any) -> dict[str, Any]:
                                  (f"$._embedded.underenheter[{index}].navn", item.get("navn")),
                                  *[(f"$._embedded.underenheter[{index}].{kind}.{key}", (item.get(kind) or {}).get(key))
                                    for kind in [("beliggenhetsadresse" if item.get("beliggenhetsadresse") else "postadresse")]
-                                   for key in ("adresse", "postnummer", "poststed") if (item.get(kind) or {}).get(key)]]),
+                                   for key in ("adresse", "postnummer", "poststed") if (item.get(kind) or {}).get(key)],
+                                 *([(f"$._embedded.underenheter[{index}].hjemmeside", item.get("hjemmeside"))] if item.get("hjemmeside") else [])]),
         "organisation_number": item.get("organisasjonsnummer"),
         "name": item.get("navn"),
         "address": item.get("beliggenhetsadresse") or item.get("postadresse"),
         "industry": item.get("naeringskode1"),
         "employees": item.get("antallAnsatte"),
         "start_date": item.get("oppstartsdato"),
+        "website": item.get("hjemmeside") or None,
     } for index, item in enumerate(rows)]}
 
 

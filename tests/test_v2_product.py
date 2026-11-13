@@ -227,8 +227,9 @@ def test_dated_news_from_feed_keeps_only_exact_site_items_and_builds_claims():
                                                                   "Firma åpner en ny fabrikk på Raufoss i dag.")}
     record, metrics = fetch_dated_news(gated_profile(["https://firma.no/feed/", "https://cdn.other.no/feed"]),
                                        fake_fetcher(responses, calls), now=NOW, sitemaps_for=lambda url: [])
-    assert record["status"] == "available" and calls == ["https://firma.no/feed/", "https://firma.no/nyheter/fabrikk"]
-    assert metrics["requests"] == 2
+    # the sitemap is read too while fewer than 10 dated candidates are known
+    assert record["status"] == "available" and calls == ["https://firma.no/feed/", "https://firma.no/sitemap.xml", "https://firma.no/nyheter/fabrikk"]
+    assert metrics["requests"] == 3
     items = record["value"]["items"]
     assert [item["url"] for item in items] == ["https://firma.no/nyheter/fabrikk"]  # annet.no item rejected
     assert items[0]["company_match"]["verified_site"] == "https://firma.no/"
@@ -266,7 +267,7 @@ def test_dated_news_rejects_product_pages_undated_and_unnamed_articles():
     assert record["status"] == "not_found"
     reasons = {item["url"]: item["reason"] for item in record["checked"]["not_published"]}
     assert "not an article" in reasons["https://firma.no/produkter/modell-x"] and "not an article" in reasons["https://firma.no/kontakt/"]
-    assert reasons["https://firma.no/kylling-med-ris/"].startswith("not an article: no news/blog/press path")
+    assert reasons["https://firma.no/kylling-med-ris/"].startswith("not news: the URL has no news/blog section")
     assert "does not name the company" in reasons["https://firma.no/nyheter/bransjen"]
     assert "https://firma.no/produkter/modell-x" not in calls  # rejected on its path, no request spent
 

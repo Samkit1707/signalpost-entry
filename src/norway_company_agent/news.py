@@ -38,9 +38,31 @@ from .evidence import evidence, utc_now
 from .politeness import host_slot
 
 MODULE = "dated_news"
-MAX_REQUESTS = 10
+MAX_REQUESTS = 18  # per verified site: feed, sitemap (+1 nested), up to 2 archive pages, article checks
 MAX_ITEMS = 10
-MAX_ARTICLE_CHECKS = 6  # article pages fetched to verify candidates (newest first)
+MAX_ARTICLE_CHECKS = 10  # article pages fetched to verify candidates (newest first)
+MAX_ARCHIVE_PAGES = 2
+ARCHIVE_TEXT = re.compile(r"^(?:neste|eldre|older|next|flere|more|arkiv|archive|nyhetsarkiv|tidligere|forrige)\b|\bside\s*2\b|\bpage\s*2\b|^2$|^»$|^›$", re.I)
+ARCHIVE_HREF = re.compile(r"(?:[?&](?:page|side|p|paged)=2\b|/(?:page|side)/2/?$|/arkiv/?$|/archive/?$|/nyhetsarkiv/?$)", re.I)
+
+
+def archive_links(base_url: str, soup: BeautifulSoup) -> list[str]:
+    """'Next page' / archive links of a news listing on the same host (rel=next, ?page=2, /page/2, /arkiv)."""
+    host = (urllib.parse.urlparse(base_url).hostname or "").casefold()
+    found: list[str] = []
+    for anchor in soup.select("a[href]"):
+        url = urllib.parse.urljoin(base_url, str(anchor.get("href") or "").strip())
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in {"http", "https"} or (parsed.hostname or "").casefold() != host:
+            continue
+        text = " ".join(anchor.get_text(" ", strip=True).split())
+        rel = " ".join(anchor.get("rel") or []) if isinstance(anchor.get("rel"), list) else str(anchor.get("rel") or "")
+        if "next" in rel.casefold() or ARCHIVE_HREF.search(parsed.path + ("?" + parsed.query if parsed.query else "")) \
+                or (ARCHIVE_TEXT.search(text) and (_newsy(url) or ARCHIVE_HREF.search(url))):
+            clean = urllib.parse.urlunparse(parsed._replace(fragment=""))
+            if clean.rstrip("/") != base_url.rstrip("/") and clean not in found:
+                found.append(clean)
+    return found[:3]
 FEED_MAX_BYTES = 1_000_000
 NEWS_PATH_TERMS = ("nyhet", "news", "aktuelt", "presse", "press", "artikkel", "artikler", "article", "blogg", "blog", "post")
 # Path segments that make a page something other than an article (checked on every segment but an article slug).
@@ -270,6 +292,34 @@ def not_article_reason(url: str) -> str | None:
     return None
 
 
+# The news gate: an item counts only if a directory of its URL path is a news/blog section, or the page itself declares
+# JSON-LD NewsArticle / BlogPosting / Article. Root-level slugs without that markup (novooi.com/london/) never count.
+NEWS_SEGMENTS = ("nytt", "nyheter", "nyhet", "news", "blog", "blogg", "artikler", "artikkel", "aktuelt", "innblikk", "presse",
+                 "press", "journal", "pressemeldinger", "nyhetsarkiv", "post", "posts", "innlegg", "arkiv")
+# Outside a news/blog section only these count: CMSs add a generic "Article" to every post and page.
+ROOT_NEWS_JSONLD_TYPES = {"newsarticle", "blogposting"}
+NEWS_JSONLD_TYPES = {"newsarticle", "blogposting", "article"}
+
+
+def news_segment(url: str) -> str | None:
+    """The news/blog directory in the URL path (never the article's own slug), or None."""
+    parts = [part.casefold() for part in urllib.parse.unquote(urllib.parse.urlparse(url).path).split("/") if part]
+    for part in parts[:-1]:
+        if part in NEWS_SEGMENTS or any(part.startswith(term + "-") or part.startswith(term + "_") for term in NEWS_SEGMENTS):
+            return part
+    return None
+
+
+def jsonld_news_type(html_text: str) -> str | None:
+    """'JSON-LD NewsArticle' / 'BlogPosting' / 'Article' when the page declares one of those types."""
+    soup = BeautifulSoup(html_text, "lxml")
+    for script in soup.select('script[type="application/ld+json"]'):
+        for kind in re.findall(r'"@type"\s*:\s*(?:\[[^\]]*?)?"([A-Za-z]+)"', script.get_text() or ""):
+            if kind.casefold() in NEWS_JSONLD_TYPES:
+                return f"JSON-LD {kind}"
+    return None
+
+
 def article_markup(html_text: str) -> str | None:
     """'og:type article' or 'JSON-LD <type>' when the page marks itself up as an article."""
     soup = BeautifulSoup(html_text, "lxml")
@@ -482,8 +532,29 @@ def fetch_dated_news(
         add([entry for entry in entries if entry["published_at"]], "news_page",
             {"url": page.get("final_url") or page.get("url"), "content_sha256": page.get("content_sha256")})
 
-    # 3. sitemap.xml when nothing dated was found yet.
-    if not items:
+    # 2b. Archive pages of the news listing (next page, /arkiv): more dated entries from the same listing markup.
+    if len(items) < MAX_ITEMS:
+        archives: list[str] = []
+        for page in value.get("pages") or []:
+            if page.get("category") == "news":
+                archives += [url for url in page.get("archive_links") or [] if url not in archives]
+                listing = page.get("url") or ""
+                if not page.get("archive_links") and listing and "?" not in listing:
+                    archives.append(listing.rstrip("/") + "?page=2")  # the common pagination when no link is marked
+        for archive_url in [url for url in archives if _same_site(url, site_domain)][:MAX_ARCHIVE_PAGES]:
+            if len(items) >= MAX_ITEMS:
+                break
+            result = get(archive_url)
+            if not result:
+                continue
+            soup = BeautifulSoup(result["body"].decode("utf-8", errors="replace"), "lxml")
+            entries = [{"title": entry["title"], "url": entry["url"], "published_at": parse_date(entry.get("raw_date"), now=now),
+                        "claim_span": entry.get("claim_span")} for entry in news_listing_items(result["final_url"], soup)]
+            add([entry for entry in entries if entry["published_at"]], "news_archive",
+                {"url": result["final_url"], "content_sha256": result["content_sha256"], "retrieved_at": result["retrieved_at"]})
+
+    # 3. sitemap.xml while fewer than MAX_ITEMS dated candidates were found (news sitemap entries, then news/blog URLs).
+    if len(items) < MAX_ITEMS:
         origin = "{0.scheme}://{0.netloc}".format(urllib.parse.urlparse(site_url))
         declared = [url for url in sitemaps_for(site_url) if _same_site(url, site_domain)]
         sitemap = get((declared or [origin + "/sitemap.xml"])[0])
@@ -499,12 +570,13 @@ def fetch_dated_news(
                     _, news, plain = parse_sitemap(nested["body"], now=now)
                     add(news, "sitemap_news", {"url": nested["final_url"], "content_sha256": nested["content_sha256"],
                                                "retrieved_at": nested["retrieved_at"]})
-        if not items:
+        if len(items) < MAX_ITEMS:
             candidates = sorted(((loc, lastmod) for loc, lastmod in plain if _newsy(loc) and _same_site(loc, site_domain)
-                                 and urllib.parse.urlparse(loc).path.strip("/").count("/") >= 1),
+                                 and urllib.parse.urlparse(loc).path.strip("/").count("/") >= 1 and loc not in items
+                                 and not not_article_reason(loc)),
                                 key=lambda pair: pair[1], reverse=True)
             for loc, _lastmod in candidates:
-                if metrics["requests"] >= MAX_REQUESTS:
+                if metrics["requests"] >= MAX_REQUESTS or len(items) >= MAX_ITEMS:
                     break
                 page = get(loc)
                 if not page:
@@ -538,14 +610,14 @@ def fetch_dated_news(
                 page = get(item["url"])
                 if page and not_article_reason(page["final_url"]):
                     reason = "redirected to " + str(not_article_reason(page["final_url"]))
-            elif not (_newsy(item["url"]) and feed_text):
+            elif not (news_segment(item["url"]) and feed_text):
                 reason = "not verified: article page not fetched (request cap) and the feed carries no article text"
         markup, page_date, text = None, None, feed_text
         if page and reason is None:
             html_text = page["body"].decode("utf-8", errors="replace")
             soup = BeautifulSoup(html_text, "lxml")
             site_pages.append((page["final_url"], set(text_block_hashes(soup))))
-            markup = article_markup(html_text)
+            markup = jsonld_news_type(html_text)
             spans: dict[str, str] = {}
             title, page_date = article_metadata(html_text, now=now, spans=spans)
             text = article_text(html_text, page["final_url"]) or feed_text
@@ -559,9 +631,11 @@ def fetch_dated_news(
         if len(ordered) >= MAX_ITEMS:
             not_published.append({"title": item["title"], "url": item["url"], "reason": f"not checked: only the newest {MAX_ITEMS} items are published"})
             continue
-        newsy = _newsy(item["url"])
-        if reason is None and not (newsy or markup):
-            reason = "not an article: no news/blog/press path and no article markup"
+        newsy = bool(news_segment(item["url"]))
+        root_markup = bool(markup) and markup.split()[-1].casefold() in ROOT_NEWS_JSONLD_TYPES
+        if reason is None and not (newsy or root_markup):
+            reason = ("not news: the URL has no news/blog section (nytt, nyheter, news, blog, post, aktuelt, …) and the page "
+                      "declares no JSON-LD NewsArticle or BlogPosting (a generic Article counts only under a news/blog section)")
         if reason is None and not item.get("published_at"):
             reason = "no publication date on the article, feed or sitemap"
         named, mention, block_check = (unrepeated_mention(text, legal_words, brands, item["url"], site_pages)
@@ -586,6 +660,8 @@ def fetch_dated_news(
                                                 + ("" if compared else "; fewer than 2 other site pages to rule out boilerplate"))})
         ordered.append(item)
     ordered.sort(key=lambda item: item["published_at"], reverse=True)
+    # rejections of items that were actually judged first; "not checked" ones last (the list is capped at 20)
+    not_published.sort(key=lambda item: str(item.get("reason") or "").startswith("not checked"))
     if not ordered:
         note = "Verified site checked (feed, news page, sitemap); no dated news item with title and publication date"
         if not_published:

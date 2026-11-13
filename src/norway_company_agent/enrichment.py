@@ -171,7 +171,7 @@ def company_activity_record(profile: dict[str, Any]) -> dict[str, Any]:
     (never a modification date) and the company named in the page's main text. Everything else is listed in
     `not_published` with the reason."""
     from .identity import full_legal_name_words, site_brands
-    from .news import _newsy, not_article_reason, unrepeated_mention
+    from .news import news_segment, not_article_reason, unrepeated_mention
 
     website, value, publishable = _website(profile)
     if not publishable:
@@ -192,7 +192,7 @@ def company_activity_record(profile: dict[str, Any]) -> dict[str, Any]:
         path_segments = [part for part in urllib.parse.urlparse(url).path.split("/") if part]
         named, mention, block_check = unrepeated_mention(str(page.get("main_text_excerpt") or ""), legal_words, brands, url, site_pages)
         reason = (not_article_reason(url)
-                  or (None if _newsy(url) else "no news/blog/press path")
+                  or (None if news_segment(url) else "no news/blog section in the URL path")
                   or (None if len(path_segments) >= 2 else "a news listing page, not an article")
                   or (None if published else "no declared publication date (modification dates are not used)")
                   or (None if named else "the only text naming the company is a block repeated on 2+ other pages of the site (boilerplate)"
@@ -247,7 +247,8 @@ def company_jobs_record(profile: dict[str, Any]) -> dict[str, Any]:
                                   "confidence": site_level, "proof": f"careers page on the verified site {value.get('final_url')}"})
             for job in listed:
                 # an ad linked from the careers page body: the company's own job page, or its posting on a recruiting system
-                postings.append({"title": job.get("title"), "url": job.get("url"), "date_posted": None, "valid_through": None,
+                postings.append({"title": job.get("title"), "url": job.get("url"), "date_posted": job.get("date_posted"),
+                                 "valid_through": job.get("valid_through"),
                                  "employment_type": None, "hiring_organization": None, "kind": job.get("kind"),
                                  "source_url": page.get("url"), "content_sha256": page.get("content_sha256"),
                                  "claim_span": job.get("claim_span"),
@@ -263,6 +264,22 @@ def company_jobs_record(profile: dict[str, Any]) -> dict[str, Any]:
                              "confidence": lower(site_level, "high" if named else "medium"),
                              "proof": f"schema.org JobPosting on {page.get('url')}"
                                       + (f", hiringOrganization {job.get('hiring_organization')!r}" if job.get("hiring_organization") else ", no hiringOrganization named")})
+    ats = value.get("ats_jobs") or {}
+    seen = {item.get("url") for item in postings}
+    for job in ats.get("jobs") or []:
+        if job.get("url") in seen:
+            continue
+        seen.add(job.get("url"))
+        # an ad on the company's own list page on a recruiting system, which its verified site links to
+        postings.append({"title": job.get("title"), "url": job.get("url"), "date_posted": job.get("date_posted"),
+                         "valid_through": job.get("valid_through"), "employment_type": None, "hiring_organization": None,
+                         "kind": "ats_list", "source_url": ats.get("list_url"), "content_sha256": ats.get("content_sha256"),
+                         "claim_span": job.get("claim_span"), "confidence": lower(site_level, "medium"),
+                         "company_match": f"listed on {ats.get('list_url')}, the recruiting page linked from {ats.get('linked_from')} {match_proof}",
+                         "proof": f"job ad on the company's recruiting page {ats.get('list_url')}, linked from the verified site"})
+    for page in careers_pages:
+        if page["url"] == ats.get("linked_from"):
+            page["open_postings"] += len(ats.get("jobs") or [])
     if not careers_pages and not postings:
         return evidence("company_jobs", "not_found", "company_site_careers", value.get("final_url") or website.get("source_url"),
                         note="Verified site crawled; no careers page or embedded job posting found",

@@ -19,7 +19,7 @@ import tldextract
 import trafilatura
 
 from .evidence import evidence
-from .news import feed_links, news_listing_items, text_block_hashes
+from .news import archive_links, feed_links, news_listing_items, text_block_hashes
 from .politeness import host_slot
 
 USER_AGENT = "builderr-signalpost-poc/0.1 (+https://builderr.ai)"
@@ -637,6 +637,69 @@ def job_postings(structured: dict[str, Any] | None) -> list[dict[str, Any]]:
 ATS_HOSTS = ("webcruiter.no", "webcruiter.com", "jobbnorge.no", "recman.no", "recman.page", "teamtailor.com", "hrmanager.no",
              "easycruit.com", "reachmee.com", "jobylon.com", "workable.com", "varbi.com", "talentech.com", "cvpartner.com",
              "finn.no")
+# An individual ad on a recruiting system (an id or a slug below /job(s)/), as opposed to the company's list page.
+ATS_POSTING = re.compile(r"\d{4,}|/jobs?/[^/?#]+|/stilling(?:er)?/[^/?#]+|/position/[^/?#]+|/vacanc(?:y|ies)/[^/?#]+|/job/ad|"
+                         r"[?&](?:job_?id|jobid|finnkode|advertid|id)=\w+", re.I)
+_DATE_TEXT = re.compile(r"(\d{1,2})\.\s?(\d{1,2})\.\s?((?:19|20)\d{2})|((?:19|20)\d{2})-(\d{2})-(\d{2})")
+_POSTED_LABEL = re.compile(r"(publisert|lagt ut|posted|published|utlyst|annonsert)\W{0,3}(?:den\s)?$", re.I)
+_DEADLINE_LABEL = re.compile(r"(søknadsfrist|soknadsfrist|frist|deadline|apply by|sist|innen)\W{0,3}(?:den\s)?$", re.I)
+
+
+def ats_host(url: str) -> str | None:
+    host = (urllib.parse.urlparse(url).hostname or "").casefold().removeprefix("www.")
+    return next((item for item in ATS_HOSTS if host == item or host.endswith("." + item)), None)
+
+
+def labelled_dates(text: str) -> dict[str, str]:
+    """A job ad's dates as the page labels them: 'Publisert 03.11.2026' -> date_posted, 'Søknadsfrist 1.12.2026' -> valid_through.
+    Unlabelled dates are not used (a bare date could be either)."""
+    found: dict[str, str] = {}
+    for match in _DATE_TEXT.finditer(text):
+        if match.group(1):
+            day, month, year = int(match.group(1)), int(match.group(2)), match.group(3)
+        else:
+            year, month, day = match.group(4), int(match.group(5)), int(match.group(6))
+        if not (1 <= month <= 12 and 1 <= day <= 31):
+            continue
+        iso = f"{year}-{month:02d}-{day:02d}"
+        before = text[max(0, match.start() - 30):match.start()]
+        if _POSTED_LABEL.search(before):
+            found.setdefault("date_posted", iso)
+        elif _DEADLINE_LABEL.search(before):
+            found.setdefault("valid_through", iso)
+    return found
+
+
+def _ad_container_text(anchor: Any) -> str:
+    """Text of the smallest block around one ad link (a card or list item holding no other ad link)."""
+    node = anchor
+    for _ in range(3):
+        parent = node.parent
+        hrefs = {str(item.get("href") or "") for item in parent.select("a[href]")} if parent is not None else set()
+        if parent is None or getattr(parent, "name", None) in {"body", "html", "main"} or len(hrefs) > 1:
+            break
+        node = parent
+    return " ".join(node.get_text(" ", strip=True).split())[:400]
+
+
+def ats_list_links(base_url: str, soup: BeautifulSoup) -> list[str]:
+    """Links from the verified site to the company's list page on a recruiting system (not a single ad)."""
+    found = []
+    for anchor in soup.select("a[href]"):
+        url = urllib.parse.urljoin(base_url, str(anchor.get("href") or "").strip())
+        parsed = urllib.parse.urlparse(url)
+        ats = ats_host(url)
+        if not ats or parsed.scheme not in {"http", "https"} or ATS_POSTING.search(parsed.path + "?" + parsed.query):
+            continue
+        if ats == "finn.no" and "/job/" not in parsed.path:
+            continue
+        host = (parsed.hostname or "").casefold().removeprefix("www.")
+        if host == ats and ats not in {"finn.no", "jobbnorge.no", "webcruiter.no", "webcruiter.com"}:
+            continue  # the system's own front page, not a company list (company lists live on a company subdomain)
+        clean = urllib.parse.urlunparse(parsed._replace(fragment=""))
+        if clean not in found:
+            found.append(clean)
+    return found[:2]
 JOB_PATH = re.compile(r"(stilling|jobb|job|karriere|career|vacanc|ledig|rekrutt|position|utlysning|apply|soknad|søknad)", re.I)
 NOT_JOB_TEXT = re.compile(r"^(?:les mer|read more|se alle|see all|søk her|søk nå|apply|tilbake|back|kontakt|meny|menu|mer|more|"
                           r"ledige stillinger|stillinger|karriere|careers?|jobs?|jobb hos oss|open positions|alle stillinger|"
@@ -670,17 +733,45 @@ def careers_listing_items(base_url: str, soup: BeautifulSoup, html_text: str | N
             continue
         if ats:
             kind = "ats_listing"
-            if not re.search(r"\d{3,}|/jobs?/|/stilling|/position|/vacanc|/job/", parsed.path + "?" + parsed.query, re.I):
-                continue  # a posting, not the ATS front page
+            if not ATS_POSTING.search(parsed.path + "?" + parsed.query):
+                continue  # a list or front page, not a posting
         elif _registered_domain(url) == base_domain and path.startswith(base_path + "/") and path != base_path \
                 and JOB_PATH.search(base_path + path) and len([part for part in path[len(base_path):].split("/") if part]) == 1:
             kind = "site_job_page"
         else:
             continue
         clean = urllib.parse.urlunparse(parsed._replace(fragment=""))
-        found.setdefault(clean, {"title": title, "url": clean, "kind": kind,
+        dates = labelled_dates(_ad_container_text(anchor))
+        found.setdefault(clean, {"title": title, "url": clean, "kind": kind, **dates,
                                  "claim_span": f'{raw_attribute(html_text, "href", href)}>{title}'})
     return list(found.values())[:15]
+
+
+def fetch_ats_list(url: str, *, linked_from: str, timeout: float = 10.0, max_bytes: int = 1_000_000) -> tuple[dict[str, Any] | None, int, int, int]:
+    """The company's list page on a recruiting system, linked from its verified site: each ad on that page (same host,
+    an ad URL, the anchor as title, labelled dates). Returns (record or None, requests, bytes, elapsed_ms)."""
+    robots_request = 0 if robots_cached(url) else 1
+    if not _robots_allowed(url, timeout):
+        return None, robots_request, 0, 0
+    started = time.monotonic()
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"})
+    try:
+        assert_public_url(url)
+        with host_slot(url) as started, open_with_retry(request, timeout) as response:
+            raw = response.read(max_bytes + 1)
+            elapsed = int((time.monotonic() - started) * 1000)
+            final_url = response.geturl()
+            if len(raw) > max_bytes or "html" not in response.headers.get("content-type", "").lower() or not ats_host(final_url):
+                return None, robots_request + 1, len(raw), elapsed
+        html_text = raw.decode("utf-8", errors="replace")
+        soup = BeautifulSoup(html_text, "lxml")
+        host = (urllib.parse.urlparse(final_url).hostname or "").casefold()
+        jobs = [item for item in careers_listing_items(final_url, soup, html_text)
+                if item["kind"] == "ats_listing" and (urllib.parse.urlparse(item["url"]).hostname or "").casefold() == host]
+        return ({"list_url": final_url, "linked_from": linked_from, "content_sha256": __import__("hashlib").sha256(raw).hexdigest(),
+                 "jobs": jobs}, robots_request + 1, len(raw), elapsed)
+    except Exception:  # noqa: BLE001
+        return None, robots_request + 1, 0, int((time.monotonic() - started) * 1000)
 
 
 def _fetch_secondary_page(url: str, *, homepage_domain: str, timeout: float, max_bytes: int, probe: bool = False) -> tuple[dict[str, Any] | None, list[dict[str, str]], int, int, int, str | None]:
@@ -724,12 +815,18 @@ def _fetch_secondary_page(url: str, *, homepage_domain: str, timeout: float, max
         }
         if page["category"] == "news":
             page["news_items"] = news_listing_items(final_url, page_soup)
+            page["archive_links"] = archive_links(final_url, page_soup)
         if page["category"] == "careers":
             page["listed_jobs"] = careers_listing_items(final_url, page_soup, page_html)
+            page["ats_list_links"] = ats_list_links(final_url, page_soup)
         if page["category"] == "identity" or probe:
             page["category"] = page["category"] or "identity"
             page["site_contact"] = site_contact(final_url, page_soup, [], html_text=page_html, page_sha256=page_sha256)
-        return page, _social_links(final_url, page_soup, page_html, page_sha256), 2, len(raw), elapsed, None
+        page_social = _social_links(final_url, page_soup, page_html, page_sha256)
+        if page["category"] == "identity":
+            # a contact/about page lists the company's own profiles in its body ("Følg oss"); the handle rules still apply
+            page_social = [{**item, "location": "contact_page"} if item.get("location") == "body" else item for item in page_social]
+        return page, page_social, 2, len(raw), elapsed, None
     except Exception as exc:
         return None, [], page_request_count, 0, int((time.monotonic() - started) * 1000), f"{type(exc).__name__}: {str(exc)[:120]}"
 
@@ -896,6 +993,18 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
                 if page_shows_org(page, proof_org):
                     break
             value["proof_pages_tried"] = proof_tried
+        if not probe:
+            # the company's ad list on a recruiting system, linked from its careers page or homepage (one list per site)
+            lists = [(url, page.get("url")) for page in pages[1:] if page.get("category") == "careers" for url in page.get("ats_list_links") or []]
+            lists += [(url, final_url) for url in ats_list_links(final_url, soup)]
+            for list_url, linked_from in lists[:1]:
+                record, list_requests, list_bytes, list_elapsed = fetch_ats_list(list_url, linked_from=linked_from, timeout=min(timeout, 10.0))
+                requests += list_requests
+                bytes_received += list_bytes
+                if list_elapsed:
+                    page_latencies.append(list_elapsed)
+                if record and record["jobs"]:
+                    value["ats_jobs"] = record
         value["pages"] = pages
         social.extend(structured_social_links(value["structured_organisations"], final_url, homepage_sha256))
         value["site_contact"] = _merge_contact(site_contact(final_url, soup, value["structured_organisations"], html_text=html,

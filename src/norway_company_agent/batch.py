@@ -10,7 +10,7 @@ from .contract import contract_fields
 from .enrichment import quarantine_unowned_site
 from .evidence import evidence, utc_now
 from .official import accounting_obligation_assessment
-from .public import diagnostics_record, guard_urls, public_profile, strip_claim_diagnostics  # noqa: F401
+from .public import diagnostics_record, guard_urls, public_profile, restrict_subunit_websites, strip_claim_diagnostics  # noqa: F401
 from .sampling import iter_bulk
 from .synthesis import build_synthesis
 
@@ -162,6 +162,7 @@ def terminal_envelope(
     guard_log: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     quarantine_unowned_site(profile)  # nothing from a site that is not this company's own stays attached
+    restrict_subunit_websites(profile)  # a sub-unit's site is labelled only when it is the company's verified site
     repaired = repair_records(profile)  # no record carries a value under a not-found state, none is available and empty
     module_states = {}
     for module in modules:

@@ -108,6 +108,39 @@ def public_profile(profile: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def subunit_site_split(profile: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Sub-unit registry websites: (kept, withheld). A sub-unit's site is labelled on its location claim only when it is
+    the same registered domain as the company's verified website; every other one is unverified for this company and
+    goes to the diagnostics file, never the envelope."""
+    verified_domain = ""
+    if _publishable(profile):
+        value = ((profile.get("evidence") or {}).get("website") or {}).get("value") or {}
+        verified_domain = (value.get("registered_domain") or _registered(_host(str(value.get("final_url") or "")))).casefold()
+    kept, withheld = [], []
+    for item in (((profile.get("evidence") or {}).get("locations") or {}).get("value") or {}).get("locations") or []:
+        raw = str(item.get("website") or "").strip()
+        if not raw:
+            continue
+        domain = (_registered(_host(raw)) or _host(raw)).casefold()
+        entry = {"organisation_number": item.get("organisation_number"), "name": item.get("name"), "website": raw}
+        (kept if verified_domain and domain == verified_domain else withheld).append(entry)
+    return kept, withheld
+
+
+_SUBUNIT_SITE_SPAN = re.compile(r'(?:;\s*)?\$\._embedded\.underenheter\[\d+\]\.hjemmeside="[^"]*"')
+
+
+def restrict_subunit_websites(profile: dict[str, Any]) -> list[dict[str, Any]]:
+    """Remove, in place, every sub-unit website that is not the company's verified site (value and cited span)."""
+    _, withheld = subunit_site_split(profile)
+    drop = {(item["organisation_number"], item["website"]) for item in withheld}
+    for item in (((profile.get("evidence") or {}).get("locations") or {}).get("value") or {}).get("locations") or []:
+        if (item.get("organisation_number"), str(item.get("website") or "").strip()) in drop:
+            item["website"] = None
+            item["claim_span"] = _SUBUNIT_SITE_SPAN.sub("", str(item.get("claim_span") or ""))
+    return withheld
+
+
 def strip_claim_diagnostics(claims: list[dict[str, Any]]) -> None:
     """Claims never list rejected candidates: drop `not_published`, and notes that quote them."""
     for claim in claims:
@@ -292,7 +325,10 @@ def diagnostics_record(profile: dict[str, Any]) -> dict[str, Any]:
         for item in ((record.get("value") or {}) if isinstance(record.get("value"), dict) else {}).get("not_published") or \
                 (record.get("checked") or {}).get("not_published") or []:
             rejected_links.append({"module": module, "url": item.get("url"), "reason": item.get("reason")})
+    subunit_sites = subunit_site_split(profile)[1]
     return {"organisation_number": profile.get("organisation_number"), "name": profile.get("name"),
+            "subunit_sites_not_labelled": [{**item, "reason": "not the same domain as the company's verified website"}
+                                           for item in subunit_sites],
             "website": {"published": _publishable(profile), "url": value.get("final_url") if _publishable(profile) else None,
                         "source_type": website.get("source_type"),
                         "identity": value.get("identity_assessment")},

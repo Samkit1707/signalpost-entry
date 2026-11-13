@@ -501,7 +501,7 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
 
 
 # v5: where on the company's own page a profile link may sit to count as the company's own profile.
-OWN_PROFILE_LOCATIONS = {"footer", "header", "jsonld_same_as"}
+OWN_PROFILE_LOCATIONS = {"footer", "header", "jsonld_same_as", "contact_page"}  # contact_page: body of the site's own contact/about page
 # Words a handle may add to the company or brand name ("jaeder.as", "kontorlev.no", "fiskeeksportnorge").
 HANDLE_SUFFIXES = {"as", "asa", "no", "norge", "norway", "official", "offisiell", "the", "group", "gruppen", "konsern"}
 # Path segments that are a platform's own words, not the company's handle.
