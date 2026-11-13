@@ -31,6 +31,7 @@ from norway_company_agent.official import fetch_official_modules  # noqa: E402
 from norway_company_agent.registry_bulk import BulkUnavailable, ensure_bulk  # noqa: E402
 from norway_company_agent.website import fetch_website, normalize_homepage  # noqa: E402
 from norway_company_agent.confidence import link_report  # noqa: E402
+from norway_company_agent.public import diagnostics_record  # noqa: E402
 from norway_company_agent import wikidata as wikidata_source  # noqa: E402
 from norway_company_agent.enrichment import (  # noqa: E402
     ENRICHMENT_MODULES,
@@ -261,8 +262,11 @@ def main() -> None:
     state: dict[str, dict] = {}
     resumed_profiles = 0
     profiles_output = Path(args.profiles_output)
-    if args.resume and profiles_output.exists():
-        prior = [json.loads(line) for line in profiles_output.read_text(encoding="utf-8").splitlines() if line.strip()]
+    # v6: checkpoints keep the raw profiles (resume needs the crawled pages); the final --profiles-output holds only the
+    # public (verified) profiles, and everything rejected goes to the diagnostics file next to --output.
+    checkpoint_path = profiles_output.with_name(profiles_output.stem + ".raw-checkpoint.jsonl")
+    if args.resume and checkpoint_path.exists():
+        prior = [json.loads(line) for line in checkpoint_path.read_text(encoding="utf-8").splitlines() if line.strip()]
         if not set(item["organisation_number"] for item in prior).issubset(set(orgs)):
             raise SystemExit("Resume profile membership is not a subset of this batch")
         state = {
@@ -282,17 +286,23 @@ def main() -> None:
             operations["latencies_ms"].extend(metric["latencies_ms"])
             if index % args.checkpoint_every == 0 or index == len(pending_profiles):
                 checkpoint = [state[org] for org in orgs if org in state]
-                write_jsonl(profiles_output, checkpoint)
+                write_jsonl(checkpoint_path, checkpoint)
 
     completed_at = utc_now()
     ordered_profiles = [state[org] for org in orgs]
+    guard_log: list[dict] = []
+    diagnostics = [diagnostics_record(profile) for profile in ordered_profiles]  # before the envelope strips them
     envelopes = [
-        terminal_envelope(profile, run_id=args.run_id, modules=requested_modules, started_at=started_at, completed_at=completed_at)
+        terminal_envelope(profile, run_id=args.run_id, modules=requested_modules, started_at=started_at, completed_at=completed_at,
+                          guard_log=guard_log)
         for profile in ordered_profiles
     ]
     validation = validate_envelopes(envelopes, args.expected_count)
-    write_jsonl(profiles_output, ordered_profiles)
+    write_jsonl(checkpoint_path, ordered_profiles)
+    write_jsonl(profiles_output, [envelope["profile"] for envelope in envelopes])
     write_jsonl(Path(args.output), envelopes)
+    diagnostics_path = Path(args.output).with_name(Path(args.output).stem + ".diagnostics.jsonl")
+    write_jsonl(diagnostics_path, diagnostics)
     latencies = sorted(operations.pop("latencies_ms"))
     operations["p50_ms"] = latencies[len(latencies) // 2] if latencies else None
     operations["p95_ms"] = latencies[min(len(latencies) - 1, int(len(latencies) * 0.95))] if latencies else None
@@ -320,6 +330,8 @@ def main() -> None:
         },
         "validation": validation,
         "links": link_report(envelopes),
+        "link_guard": {"removed_from_envelopes": len(guard_log), "examples": guard_log[:20],
+                       "diagnostics_file": str(diagnostics_path)},
     }
     if args.site_dir:
         # The saved site is built from exactly these envelopes; a site failure is reported, never drops envelopes.

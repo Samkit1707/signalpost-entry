@@ -233,12 +233,16 @@ def test_dated_news_from_feed_keeps_only_exact_site_items_and_builds_claims():
     assert [item["url"] for item in items] == ["https://firma.no/nyheter/fabrikk"]  # annet.no item rejected
     assert items[0]["company_match"]["verified_site"] == "https://firma.no/"
     profile = make_profile(7, records=[account(2025)], website=True)
+    profile["evidence"]["website"]["value"].update({"final_url": "https://firma.no/", "registered_domain": "firma.no"})
     profile["evidence"]["dated_news"] = record
     env = envelope(profile)
     news_claims = [claim for claim in env["claims"] if claim["field"] == "dated_news"]
     assert len(news_claims) == 1 and news_claims[0]["availability"] == "available"
-    assert news_claims[0]["value"] == {"title": "Ny fabrikk i dag", "url": "https://firma.no/nyheter/fabrikk",
-                                       "published_at": "2026-09-01", "source_kind": "rss"}
+    value = news_claims[0]["value"]
+    assert {k: value[k] for k in ("title", "url", "published_at", "published_date", "source_kind")} == {
+        "title": "Ny fabrikk i dag", "url": "https://firma.no/nyheter/fabrikk", "published_at": "2026-09-01",
+        "published_date": "2026-09-01", "source_kind": "rss"}
+    assert value["company_match"].startswith("article on the verified company site https://firma.no/; names the company")
     ev = next(item for item in env["evidence"] if item["id"] == news_claims[0]["evidence_ids"][0])
     # title and date are cited on the article page itself, which also names the company
     assert ev["item_url"] == "https://firma.no/nyheter/fabrikk" and ev["published_at"] == "2026-09-01"
@@ -322,10 +326,12 @@ def check_site(out: Path, envelopes: list[dict]) -> None:
         assert "None" not in re.sub(r"<[^>]+>", " ", page) and "nan" not in page.split("<body>")[1].split()
         assert 'class="summary"' in page and "ev-registry-1" in page
         rows = re.findall(r"<tr><td>[^<]+</td><td[^>]*>.*?</td><td>(.*?)</td></tr>", page.split("<tbody>")[1].split("</tbody>")[0])
-        assert rows and all("source ↗" in row and ("retrieved" in row or "as of" in row) for row in rows)
+        # v6: the hostile javascript: site (index 8) is dropped by the link guard together with its evidence
+        hostile = env["organisation_number"].endswith("08")
+        assert rows and all(("source ↗" in row and ("retrieved" in row or "as of" in row)) or (hostile and "no source" in row) for row in rows)
         data = (out / "data" / f"{env['organisation_number']}.js").read_text()
         payload = json.loads(data[data.index(",{") + 1:data.rindex(");")])
-        assert all(fact["src"] and (fact["retrieved"] or fact["as_of"]) for fact in payload["facts"])
+        assert all((fact["src"] and (fact["retrieved"] or fact["as_of"])) or hostile for fact in payload["facts"])
 
 
 def test_site_builds_on_300_profiles(tmp_path):

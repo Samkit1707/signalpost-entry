@@ -51,13 +51,9 @@ MIN_GUESS_DETAILS = 2
 
 
 def guessed_domain_proven(assessment: dict[str, Any]) -> bool:
-    """A guessed domain needs the exact org number (score 1.0), or the full legal name together with at least two
-    independent registry details (postcode+city, street address, phone) in the site's own footer/contact block."""
-    if float(assessment.get("score") or 0) >= 1.0:
-        return True
-    proof = assessment.get("registry_detail_proof") or {}
-    return bool(assessment.get("publishable") and proof.get("name_with_detail")
-                and len(set(proof.get("details") or [])) >= MIN_GUESS_DETAILS)
+    """v6: a guessed domain needs the exact org number printed on it (score 1.0). Before v6 the full legal name with two
+    registry details also counted; a name/address match on a domain we chose ourselves is no longer proof."""
+    return bool(assessment.get("publishable")) and float(assessment.get("score") or 0) >= 1.0 and not assessment.get("group_site")
 
 
 def guess_website(profile: dict[str, Any], fetch, gate, *, resolver=resolves) -> tuple[dict[str, Any] | None, dict[str, Any], list[dict[str, Any]]]:
@@ -166,7 +162,7 @@ PROBE_TIMEOUT = 5.0  # seconds per socket operation for a guessed-domain probe (
 def discover_website(profile: dict[str, Any], fetch, gate, *, resolver=resolves, tried: set[str] | None = None,
                      keep_going=lambda: True, max_fetches: int = MAX_CANDIDATE_FETCHES) -> tuple[dict[str, Any] | None, dict[str, Any], list[dict[str, Any]]]:
     """Probe candidates in order; publish only the exact org number on the homepage/contact/about/legal page (single
-    number in that block), or the full legal name with two registry details in the site's own footer/contact block.
+    number in that block).
     Group sites are labelled, never published. After acceptance, the site gets the normal crawl for enrichment."""
     metrics = {"requests": 0, "bytes": 0, "latencies_ms": []}
     trail: list[dict[str, Any]] = []
@@ -209,13 +205,13 @@ def discover_website(profile: dict[str, Any], fetch, gate, *, resolver=resolves,
                  "final_url": (record.get("value") or {}).get("final_url"), "content_sha256": record.get("content_sha256"),
                  "retrieved_at": record.get("retrieved_at")}
         trail.append(entry)
-        # Name-derived .com domains are often a foreign parent's multi-country site: only the printed org number proves them.
-        org_number_only = method != "registry_email_domain" and not domain.endswith(".no")
-
+        # v6: no candidate here is the registry's own website entry (e-mail domain, name variants on .no or .com,
+        # sub-unit names): only the exact organisation number printed on the site proves it. A name, address or
+        # phone match never publishes a domain we chose ourselves (v5 shipped isabellacafe.com, a US cafe, as a lead).
         def proven(result: dict[str, Any]) -> bool:
-            if result.get("group_site"):
+            if result.get("group_site") or result.get("foreign_country_signals") and float(result.get("score") or 0) < 1.0:
                 return False
-            return float(result.get("score") or 0) >= 1.0 if org_number_only else guessed_domain_proven(result)
+            return bool(result.get("publishable")) and float(result.get("score") or 0) >= 1.0
 
         if record.get("status") != "available" or not proven(assessment):
             continue

@@ -477,7 +477,7 @@ def company_page(envelope: dict[str, Any], record: dict[str, Any], run: dict[str
     org = envelope["organisation_number"]
     evidence = _evidence_map(envelope)
     synthesis = envelope.get("synthesis") or {}
-    topics = {"what_it_does": "What it is and does", "financials": "Latest financials", "changes": "What changed",
+    topics = {"headline": "Key fact", "what_it_does": "What it is and does", "financials": "Latest financials", "changes": "What changed",
               "why_it_matters": "Why the change matters", "unknown": "What is unknown"}
     summary_html = ""
     for topic, heading in topics.items():

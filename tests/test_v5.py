@@ -2,6 +2,7 @@
 news is published only as an article with a publication date that names the company; every link has a confidence."""
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -96,7 +97,10 @@ def test_profiles_carry_confidence_proof_and_rejections_into_claims():
     claim = next(c for c in envelope["claims"] if c["field"] == "external_profile")
     assert claim["confidence_level"] == "high" and claim["proof"] == "linked from https://firma.no/ footer"
     aggregate = next(c for c in envelope["claims"] if c["field"] == "external_profiles")
-    assert aggregate["not_published"][0]["reason"].startswith("profile URL carries only a numeric")
+    # v6: rejected candidates never appear in the envelope; they go to the diagnostics file
+    assert "not_published" not in aggregate and "1234567" not in json.dumps(envelope)
+    from norway_company_agent.public import diagnostics_record
+    assert diagnostics_record(profile)["rejected_links"][0]["reason"].startswith("profile URL carries only a numeric")
     website = next(c for c in envelope["claims"] if c["field"] == "official_website")
     assert website["confidence_level"] == "high" and website["discovery_method"] == "registry_hjemmeside"
     # the same profiles under a plainly named field, for scorers that look for social profiles
@@ -107,7 +111,7 @@ def test_profiles_carry_confidence_proof_and_rejections_into_claims():
     assert social_claim["evidence_ids"] == aggregate["evidence_ids"]
     report = link_report([envelope])
     assert report["published"]["social"]["high"] == 1 and report["websites_by_method"] == {"registry_hjemmeside": 1}
-    assert report["candidates_not_published"] == {"social": 1}  # not counted twice
+    assert report["candidates_not_published"] == {}  # v6: rejections are counted in the diagnostics file, not the envelope
     assert report["social_profiles"] == {"companies": 1, "profiles": 1, "high": 1, "medium": 0}
     # the site shows the clickable profile link with its confidence and proof, not just the platform name
     facts = {fact["key"]: fact for fact in company_facts(envelope)}

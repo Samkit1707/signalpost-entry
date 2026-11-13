@@ -1,6 +1,8 @@
 """Offline tests for v4: exact citations, honest states, and nothing from a site that is not the company's own."""
 from __future__ import annotations
 
+import json
+
 import copy
 import sys
 from pathlib import Path
@@ -303,17 +305,20 @@ def test_unowned_site_content_is_quarantined_and_nothing_is_attached():
     profile["evidence"]["company_jobs"] = company_jobs_record(profile)
     profile["evidence"]["external_profiles"] = external_profiles_record(profile, None)
     env = envelope(profile)
-    value = env["profile"]["evidence"]["website"]["value"]
+    value = profile["evidence"]["website"]["value"]  # the raw record is quarantined in place ...
     assert value["quarantined"] == {"social_links": 1, "emails": 2, "phones": 1, "jsonld_contacts_and_logos": 1,
                                     "job_postings": 2, "news_items": 1, "feeds": 1}
     assert not any(key in value for key in ("site_contact", "job_postings", "news_items", "feed_links", "description",
                                             "main_text_excerpt", "identity_text_excerpt"))
     assert value["social_links"] == [] and all(set(page) <= {"url", "title", "content_sha256", "category"} for page in value["pages"])
+    # ... and v6: the envelope carries no trace of the unowned site at all
+    public = env["profile"]["evidence"]["website"]
+    assert public["status"] == "not_found" and public["value"] is None and value["final_url"] not in json.dumps(env)
     published = {c["field"] for c in env["claims"] if c["availability"] == "available"}
     assert not published & {"site_email", "site_phone", "site_logo", "site_address", "careers_page", "job_posting", "external_profile",
                             "external_profiles", "company_jobs", "company_activity", "dated_news", "official_website"}
     assert check_envelopes([env])["site_ownership_problems"] == 0
-    assert quarantine_unowned_site(env["profile"]) == value["quarantined"]  # idempotent
+    assert quarantine_unowned_site(profile) == value["quarantined"]  # idempotent
 
 
 def test_group_site_appears_only_as_the_labelled_group_relationship():
@@ -324,8 +329,7 @@ def test_group_site_appears_only_as_the_labelled_group_relationship():
     profile["evidence"]["website"] = apply_website_identity_gate(
         profile, unowned_site(f"Hage Konsern AS org.nr {OTHER}", title="Testfirma 6 AS – Hage Konsern"))["website"]
     env = envelope(profile)
-    group_site = [c for c in env["claims"] if c["field"] == "group_website"]
-    assert len(group_site) == 1 and group_site[0]["value"]["relationship"].startswith("site shows organisation number(s) of the corporate group")
+    assert not [c for c in env["claims"] if c["field"] == "group_website"]  # v6: another entity's site is never linked
     assert not [c for c in env["claims"] if c["availability"] == "available" and c["field"] in {"site_email", "site_logo", "external_profile",
                                                                                                   "careers_page", "official_website"}]
     assert check_envelopes([env])["passed"]
@@ -337,7 +341,8 @@ def test_validator_flags_content_left_on_an_unowned_site():
     profile["evidence"]["website"]["value"]["identity_assessment"] = {"publishable": False, "score": 0.6}
     env = terminal_envelope(profile, run_id="t", modules=MODULES, started_at="a", completed_at="b")
     assert check_envelopes([env])["site_ownership_problems"] == 0  # terminal_envelope quarantines defensively
-    env["profile"]["evidence"]["website"]["value"]["site_contact"] = {"emails": ["post@perfekthage.no"]}
+    env["profile"]["evidence"]["website"] = {**profile["evidence"]["website"], "status": "available"}
+    env["profile"]["evidence"]["website"]["value"] = {**profile["evidence"]["website"]["value"], "site_contact": {"emails": ["post@perfekthage.no"]}}
     assert envelope_problems(env)["site_ownership"][0]["problem"] == "content_kept_from_site_that_is_not_the_companys_own"
 
 

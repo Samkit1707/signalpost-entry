@@ -228,15 +228,18 @@ def profile_facts(value: dict[str, Any]) -> list[Fact]:
 
 
 def job_facts(value: dict[str, Any]) -> list[Fact]:
-    facts: list[Fact] = [("careers_page", {"url": item.get("url"), "title": item.get("title")}, item.get("claim_span"), None,
+    facts: list[Fact] = [("careers_page", {"url": item.get("url"), "title": item.get("title"), "open_postings": item.get("open_postings") or 0},
+                          item.get("claim_span"), None,
                           {"source_url": item.get("url"), "content_sha256": item.get("content_sha256"), "span_kind": "quote"})
                          for item in value.get("careers_pages") or []]
     for job in value.get("job_postings") or []:
         if not _clean(job.get("title")):
             continue
-        facts.append(("job_posting", {"title": _clean(job.get("title")), "date_posted": job.get("date_posted"),
+        date = (job.get("date_posted") or "")[:10] or None
+        facts.append(("job_posting", {"title": _clean(job.get("title")), "url": job.get("url") or job.get("source_url"),
+                                      "published_date": date, "date_posted": job.get("date_posted"),
                                       "valid_through": job.get("valid_through"), "employment_type": job.get("employment_type"),
-                                      "source_url": job.get("source_url")},
+                                      "source_url": job.get("source_url"), "company_match": job.get("company_match")},
                       job.get("claim_span"), (job.get("date_posted") or "")[:10] or None,
                       {"source_url": job.get("source_url"), "content_sha256": job.get("content_sha256"), "span_kind": "quote"}))
     return facts

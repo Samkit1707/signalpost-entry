@@ -30,8 +30,8 @@ def profile(name: str, **row: str) -> dict:
             "evidence": {"registry": evidence("registry", "available", "official_registry_bulk", "https://data.brreg.no/x", value=registry_row)}}
 
 
-def site(url: str, title: str, footer: str, pages: list | None = None) -> dict:
-    return evidence("website", "available", "name_derived_domain_candidate", url, value={
+def site(url: str, title: str, footer: str, pages: list | None = None, source_type: str = "registry_linked_company_website") -> dict:
+    return evidence("website", "available", source_type, url, value={
         "final_url": url, "title": title, "description": "", "identity_text_excerpt": footer,
         "main_text_excerpt": title + FILLER, "pages": pages or [], "structured_organisations": [],
     })
@@ -101,26 +101,18 @@ def test_fetch_json_respects_per_host_cap(monkeypatch):
 
 def guess(name: str, footer: str, pages: list | None = None):
     def fetch(url, source_type=None):
-        return site(url, f"{name.title()} – ferskt brød", footer, pages), {"requests": 2, "bytes": 100, "latencies_ms": [10]}
+        return site(url, f"{name.title()} – ferskt brød", footer, pages, "name_derived_domain_candidate"), {"requests": 2, "bytes": 100, "latencies_ms": [10]}
     return guess_website(profile(name), fetch, apply_website_identity_gate, resolver=lambda host: True)
 
 
-def test_guessed_domain_published_with_full_name_and_registry_detail_in_footer():
+def test_v6_guessed_domain_never_published_on_name_and_registry_details():
+    # v5 published this (full name + street + postcode + phone); v6: a domain we chose needs the printed org number.
     accepted, _, trail = guess("NORDLYS BAKERI AS", "© 2026 Nordlys Bakeri AS · Strandgata 21, 4307 Sandnes · Tlf 51 68 57 00")
-    assert accepted is not None
-    assessment = accepted["value"]["identity_assessment"]
-    assert assessment["publishable"] and assessment["score"] < 1.0
-    assert set(assessment["registry_detail_proof"]["details"]) == {"postcode_city", "street_address", "phone"}
-    assert any("footer/contact block" in reason for reason in assessment["reasons"])
-    assert trail[0]["result"] == "available"
-
-
-def test_guessed_domain_accepts_two_details_on_own_contact_page_footer():
+    assert accepted is None and trail[0]["result"] == "available"
+    assert any("only the exact organisation number" in reason for reason in trail[0]["reasons"])
     contact = {"url": "https://nordlysbakeri.no/kontakt", "category": "identity",
                "identity_text_excerpt": "Nordlys Bakeri AS, 4307 Sandnes, telefon +47 51 68 57 00"}
-    accepted, _, _ = guess("NORDLYS BAKERI AS", "© 2026", pages=[contact])
-    assert accepted is not None
-    assert accepted["value"]["identity_assessment"]["registry_detail_proof"]["details"] == ["postcode_city", "phone"]
+    assert guess("NORDLYS BAKERI AS", "© 2026", pages=[contact])[0] is None
 
 
 def test_guessed_domain_needs_two_registry_details_without_org_number():
@@ -176,7 +168,7 @@ def test_single_word_name_needs_registry_detail_unless_org_number_shown():
         return assess_website_identity(p)
 
     name_only = assess("© 2026 Aiota")
-    assert not name_only["publishable"] and name_only["score"] == 0.85
+    assert not name_only["publishable"] and name_only["score"] == 0.85  # registry-listed site
 
     with_postcode = assess("Aiota · 4307 Sandnes")
     assert with_postcode["publishable"] and with_postcode["registry_detail_proof"]["details"] == ["postcode_city"]

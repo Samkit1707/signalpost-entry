@@ -1,10 +1,11 @@
-Fresh-clone check, 2026-11-02, uv 0.12.23 (46b84fd0b 2026-10-03 x86_64-apple-darwin)
-Checked commit c231133 below; the pushed v5 commit has the identical tree plus this file.
-commit c231133aec43749fd4586198d35301cfb6384f54
-files_tracked 323
+Fresh-clone check, 2026-11-14, uv 0.12.23 (46b84fd0b 2026-10-03 x86_64-apple-darwin)
+Checked commit 412a5fb below; the pushed v6 commit has the identical tree plus this file.
+commit 412a5fbee15d026c9a93126d7766c09adce5357e
+files_tracked 327
 uv_sync_exit 0
-204 passed, 5 subtests passed in 15.18s
-replay_exit 0
+214 passed, 5 subtests passed in 27.40s
+replay_exit 0 (2 expected changes found, 0 false)
 official_command_help_exit 0
 lockfile_unchanged yes
-live_5_exit 0 (official command, --bulk from local snapshot): validation passed True, 42 requests, runtime 50.0 s; 184 published claims, 0 citation / 0 state / 0 ownership problems, 0 withheld; site built
+live_5_exit 0
+live_5 (official command, --bulk from local snapshot): validation passed True | 42 requests | runtime 41.5 s | 184 published claims, 0 / 0 / 0 problems | site ok

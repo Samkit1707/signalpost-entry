@@ -246,12 +246,22 @@ def feed_links(base_url: str, soup: BeautifulSoup) -> list[str]:
     return links[:3]
 
 
+# v6: statutory statements and policies are dated pages, not news about the company.
+POLICY_TERMS = ("apenhetslov", "aapenhetslov", "openhetslov", "transparency-act", "likestilling", "redegjorelse", "redegjoerelse",
+                "personvern", "privacy", "cookie", "informasjonskapsler", "salgsbetingelser", "vilkar", "terms", "gdpr",
+                "aktsomhetsvurdering", "due-diligence", "barekraftsrapport", "arsrapport", "annual-report")
+
+
 def not_article_reason(url: str) -> str | None:
     """Why a URL is not an article page (contact/about/product/services/listing path), or None."""
     segments = [part.casefold() for part in urllib.parse.unquote(urllib.parse.urlparse(url).path).split("/") if part]
     if not segments:
         return "the site's homepage, not an article"
     checked = segments if len(segments) == 1 else segments[:-1]  # the last of several segments is the article's own slug
+    slug = segments[-1]
+    policy = next((term for term in POLICY_TERMS if term in slug), None)
+    if policy:
+        return f"a compliance/policy statement ({policy}), not news"
     for segment in checked:
         term = next((term for term in NOT_ARTICLE_TERMS if segment == term or segment.startswith(term + "-") or segment.startswith(term + "_")
                      or (term in {"kontakt", "contact", "produkt", "product", "tjeneste"} and segment.startswith(term))), None)
@@ -418,7 +428,7 @@ def fetch_dated_news(
     identity = value.get("identity_assessment") or {}
     site_url = value.get("final_url")
     if website.get("status") != "available" or not identity.get("publishable") or not site_url:
-        return evidence(MODULE, "not_found", "company_site_news", website.get("source_url") or site_url or "about:no-verified-site",
+        return evidence(MODULE, "not_found", "company_site_news", "about:no-verified-site",
                         note="No identity-gated company website to read dated news from"), metrics
     site_domain = _registered_domain(site_url)
     company_match = {"verified_site": site_url, "registered_domain": site_domain, "identity_status": identity.get("status"),

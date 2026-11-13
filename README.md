@@ -335,3 +335,38 @@ no change can be judged. No forecasts.
 Measurement, v4 (c194d02) vs v5 on the same 300 companies, snapshot and day: `submission/v5-compare-300.json`
 (`scripts/compare_v5.py`). Hand-check page for 60 never-run companies: `submission/audit-v5.html`
 (`scripts/build_audit_v5.py`).
+
+### v6 of this entry: verified-only envelopes, no wrong-company links, buyer-first summary
+
+Builderr's v5 review found 15 of 73 checked claims about another company. Both examples were **rejected** candidates the
+envelope still carried: ISABELLA CAFE AS's name-variant guess `isabellacafe.com` (a US cafe) in
+`profile.website_discovery.candidates[].final_url`, and LØWEHJERTE DESIGN AS's Squarespace template `sameAs`
+(`twitter.com/squarespace`) in the raw website record and the claims' `not_published` lists.
+
+**Only verified links leave the agent** (`public.py`). The envelope's `profile` (and `--profiles-output`) is rebuilt from a
+whitelist: registry records, the website record only when the site passed the gate (no raw page text, JSON-LD or
+unassessed links), enrichment records without diagnostics, and no candidate trail. Claims carry no `not_published`.
+A last-line guard removes any link or domain not on Brønnøysund, Wikidata, the verified site or a published profile; the
+report's `link_guard` counts what it removed. Rejections go to `<output>.diagnostics.jsonl` for audits. Raw profiles
+for `--resume` are checkpointed in `<profiles>.raw-checkpoint.jsonl`.
+
+**Websites** (`identity.py`, `domain_guess.py`). Any domain not listed in the registry (e-mail domain, Wikidata P856,
+name variants on `.no` or `.com`, sub-unit names) publishes only if the exact org number is printed on it. Any site
+whose own address, phone or identity text points to another country (JSON-LD `addressCountry` not NO, US state + ZIP,
+"City, ST" title, +1 phone, "USA") is rejected unless it prints the org number. `group_website` claims are no longer emitted.
+
+**Social profiles.** Platform and vendor accounts (Squarespace, Wix, WordPress, Shopify, Webflow, GoDaddy, one.com, the
+platforms themselves, …) are blocklisted; links in "powered by" / "designed by" / "levert av" credit lines are ignored;
+Wikidata profiles must also match the name or verified brand. A rejected site cascades: nothing from it is published.
+
+**News and jobs.** `dated_news` values carry `title`, `url`, `published_date` and `company_match`; statutory statements
+and policy pages are not news. Careers pages list `open_postings`; job ads linked from a careers page (own job pages or
+ATS postings: Webcruiter, Jobbnorge, Teamtailor, FINN, …) become `job_posting` claims with `title`, `url`,
+`published_date` and `company_match`.
+
+**Summary.** The first sentence is one buyer-relevant fact with its source ("Revenue NOK 17.4m in FY2025, down 3% from
+FY2024 (Brønnøysund accounts)"); distress status, result, hiring, news, headcount or founding date when revenue is not
+filed. The registry identity follows. `synthesis.headline` holds it.
+
+Hand-check page for 100 never-run companies: `submission/audit-v6.html` (`scripts/build_audit_v6.py`), 25/25 links
+checked correct by the owner.

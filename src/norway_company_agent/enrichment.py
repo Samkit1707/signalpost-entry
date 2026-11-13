@@ -122,6 +122,11 @@ def external_profiles_record(profile: dict[str, Any], wikidata: dict[str, Any] |
             normalized = normalize_social_url(link["url"]) or {"platform": link["platform"], "url": link["url"]}
             key = _profile_key(normalized["url"])
             handle = assess_social_identity(profile, {"platform": link["platform"], "url": normalized["url"]}, site_brands(value) if publishable else [])
+            if not handle.get("publishable"):
+                # v6: even on the exact Wikidata item, the handle must be the company's name or its verified brand
+                not_published.append({"platform": link["platform"], "url": normalized["url"], "reason": handle.get("reason"),
+                                      "seen": f"Wikidata item {wiki_value['wikidata_item']}"})
+                continue
             item = merged.setdefault(key, {"platform": link["platform"], "url": normalized["url"],
                                            "sources": [], "identity_proof": [],
                                            "confidence": handle.get("confidence") or "medium",
@@ -228,16 +233,33 @@ def company_jobs_record(profile: dict[str, Any]) -> dict[str, Any]:
     legal_words, brands = full_legal_name_words(profile.get("name")), site_brands(value)
     careers_pages = []
     postings = []
+    site_url = value.get("final_url")
+    identity_reason = "; ".join(((value.get("identity_assessment") or {}).get("reasons") or [])[:1])
+    match_proof = f"on the verified company site {site_url} ({identity_reason})" if identity_reason else f"on the verified company site {site_url}"
     for page in [{"url": value.get("final_url"), "title": value.get("title"), "content_sha256": value.get("content_sha256"),
                   "job_postings": value.get("job_postings") or [], "category": None}] + list(value.get("pages") or []):
         if page.get("category") == "careers" and page.get("content_sha256"):
             # The careers page itself is the evidence: its title as fetched (or its URL when it has no title).
+            listed = page.get("listed_jobs") or []
             careers_pages.append({"url": page.get("url"), "title": page.get("title"), "content_sha256": page.get("content_sha256"),
                                   "claim_span": " ".join(str(page.get("title") or "").split()) or page.get("url"),
+                                  "open_postings": len(listed) + len(page.get("job_postings") or []),
                                   "confidence": site_level, "proof": f"careers page on the verified site {value.get('final_url')}"})
+            for job in listed:
+                # an ad linked from the careers page body: the company's own job page, or its posting on a recruiting system
+                postings.append({"title": job.get("title"), "url": job.get("url"), "date_posted": None, "valid_through": None,
+                                 "employment_type": None, "hiring_organization": None, "kind": job.get("kind"),
+                                 "source_url": page.get("url"), "content_sha256": page.get("content_sha256"),
+                                 "claim_span": job.get("claim_span"),
+                                 "confidence": site_level if job.get("kind") == "site_job_page" else lower(site_level, "medium"),
+                                 "company_match": f"listed on the careers page {page.get('url')} {match_proof}",
+                                 "proof": f"job ad linked from the careers page {page.get('url')} of the verified site"})
         for job in page.get("job_postings") or []:
             named, _ = company_mention(str(job.get("hiring_organization") or ""), legal_words, brands)
-            postings.append({**job, "source_url": page.get("url"), "content_sha256": page.get("content_sha256"),
+            postings.append({**job, "url": job.get("url") or page.get("url"), "source_url": page.get("url"),
+                             "content_sha256": page.get("content_sha256"),
+                             "company_match": (f"hiringOrganization {job.get('hiring_organization')!r}; " if job.get("hiring_organization") else "")
+                             + f"JobPosting {match_proof}",
                              "confidence": lower(site_level, "high" if named else "medium"),
                              "proof": f"schema.org JobPosting on {page.get('url')}"
                                       + (f", hiringOrganization {job.get('hiring_organization')!r}" if job.get("hiring_organization") else ", no hiringOrganization named")})

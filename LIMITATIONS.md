@@ -13,8 +13,8 @@
 - The synthesis is template-based from the envelope's own claims. It states no trend without two filed years of the
   same account type that both report the figure, and it does not interpret beyond the sources.
 - The compare view needs JavaScript; company pages and the index list are plain HTML.
-- Website candidates publish only on the printed organisation number (or full name + two registry details on `.no`);
-  many real sites that print neither stay unpublished by design. Registry e-mail domains are often an accountant's
+- v6: every website not listed in the registry (e-mail domain, Wikidata P856, name variants) publishes only on the
+  printed organisation number; many real sites that show only the name stay unpublished by design. Registry e-mail domains are often an accountant's
   or property manager's and are rejected by the same rule.
 - Role start dates are not in the Brønnøysund roles API; `role` claims carry the role group's last-changed date.
 - Group detection uses Norwegian group structure only: a foreign parent's site is caught by the `.com`
@@ -24,3 +24,6 @@
 - A site whose footer prints any organisation number other than this company's (for example a web agency's, with no
   number of its own) is not published (precision over recall).
 - `accounting_obligation` is a rule classification; its evidence is the registry cells it reads, not the rule page.
+- v6: a site with foreign-country signals (US address/phone, non-Norwegian JSON-LD country) is not published without the
+  org number, even when it is the registry's own entry. Job ads from careers pages carry no date unless the page
+  embeds a JobPosting date. Quotes in evidence may show "[unverified link withheld]" where a page named another domain.

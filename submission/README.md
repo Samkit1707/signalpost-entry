@@ -1,4 +1,18 @@
-# Submission evidence (v5)
+# Submission evidence (v6)
+
+v6 (14 Nov 2026), after Builderr's v5 review (15 of 73 checked claims about another company). Both examples were rejected
+candidates the v5 envelope still carried; v6 envelopes hold only verified links (see README "v6 of this entry").
+
+| File | Content |
+|---|---|
+| `smoke-report.json`, `smoke-envelopes.jsonl`, `smoke-run.log` | 100-company smoke on v6: 100/100 envelopes, validation passed, 895 requests, p50 255 ms, p95 3,428 ms, 128 s. 3,795 published claims; 0 citation, state or site-ownership problems. Every link in the envelopes is a published claim, Brønnøysund/Wikidata, or a page on the company's verified site |
+| `site/` | the static site the v6 smoke run wrote; the summary opens with a sourced key fact |
+| `audit-v6.html` | hand-check page for 100 companies never run before: every published website, social profile and news link with proof (25 links), v5-only links on the same companies (1), every rejected candidate (`scripts/build_audit_v6.py`). Checked by hand by the owner: 25/25 correct |
+| `tests.txt`, `fresh-clone-check.txt` | offline tests (214); clone → `uv sync --frozen` → tests → replay → live 5-company run |
+
+The v5 evidence below is kept for reference (its smoke files and site were replaced by v6's).
+
+## v5 evidence (2 Nov)
 
 Official command (after `uv sync`), run on 1–2 Nov 2026 with the 20 Oct registry bulk snapshot passed as `--bulk` and the
 same Wikidata P2333 cache, so v4 and v5 read the same inputs:

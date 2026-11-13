@@ -157,9 +157,33 @@ def link_location(node: Any) -> str:
     return "body"
 
 
+# v6: a "powered by" / "designed by" / theme credit line links the vendor or agency, never the company.
+CREDIT_TEXT = re.compile(
+    r"powered\s+by|drevet\s+av|levert\s+av|laget\s+av|utviklet\s+av|designet\s+av|design\s*(?:by|av)\b|designed\s+by|"
+    r"website\s+by|web\s*site\s+by|site\s+by|nettside\s+(?:av|fra|levert)|hjemmeside\s+(?:av|fra|levert)|made\s+(?:by|with)|"
+    r"created\s+(?:by|with)|built\s+(?:by|with)|theme\s+(?:by|from)|template\s+(?:by|from)|proudly\s+(?:created|designed|made|built)|"
+    r"webdesign|web\s*design|wordpress\s+theme|levert\s+gjennom|publisert\s+med|laget\s+med|bygget\s+(?:av|med)",
+    re.I)
+
+
+def in_credit_area(node: Any) -> bool:
+    """The link sits in a short credit line ("Proudly designed by X", "Levert av Y", "Powered by Squarespace")."""
+    for depth, parent in enumerate([node, *list(node.parents)[:3]]):
+        if getattr(parent, "name", None) in {"body", "html", "footer", "header", "nav", None}:
+            break
+        if depth and len(parent.select("a[href]")) > 1:
+            break  # a block with other links (the footer's own profile icons) is not the credit line itself
+        text = " ".join(parent.get_text(" ", strip=True).split()) if hasattr(parent, "get_text") else ""
+        if len(text) > 300:
+            break
+        if CREDIT_TEXT.search(text) or CREDIT_TEXT.search(" ".join([str(parent.get("class") or ""), str(parent.get("id") or "")])):
+            return True
+    return False
+
+
 def _social_links(base_url: str, soup: BeautifulSoup, html_text: str | None = None, page_sha256: str | None = None) -> list[dict[str, str]]:
     found: dict[tuple[str, str], dict[str, str]] = {}
-    candidates = [("href", str(node.get("href") or ""), link_location(node)) for node in soup.select("a[href]")]
+    candidates = [("href", str(node.get("href") or ""), "credit" if in_credit_area(node) else link_location(node)) for node in soup.select("a[href]")]
     candidates.extend(("data-href", str(node.get("data-href") or ""), link_location(node) + "_embed") for node in soup.select("[data-href]"))
     candidates.extend(("src", str(node.get("src") or ""), link_location(node) + "_embed") for node in soup.select("iframe[src]"))
     # a profile linked both from the body and the footer counts as linked from the footer
@@ -261,9 +285,24 @@ def identity_excerpt(soup: BeautifulSoup) -> str:
     return " ".join(" ".join(parts).split())[:3000]
 
 
+# v6: careers is matched on whole words, not substrings ("faa-jobben-gjort", a DIY advice page, is not a careers page).
+CAREERS_WORDS = {"karriere", "career", "careers", "stillinger", "stilling", "jobb", "jobs", "rekruttering", "vacancies", "vacancy"}
+CAREERS_PHRASES = ("ledige stillinger", "ledige jobber", "jobb hos oss", "jobbe hos oss", "work with us", "join us", "open positions")
+
+
+def _is_careers(url: str, text: str) -> bool:
+    words = re.findall(r"[a-zæøå0-9]+", (urllib.parse.unquote(urllib.parse.urlparse(url).path) + " " + text).casefold().replace("_", " "))
+    joined = " ".join(words)
+    return bool(CAREERS_WORDS & set(words)) or any(phrase in joined for phrase in CAREERS_PHRASES)
+
+
 def page_category(url: str, text: str = "") -> str | None:
     haystack = (urllib.parse.urlparse(url).path + " " + text).casefold()
     for name, terms in PRIORITY_CATEGORIES:
+        if name == "careers":
+            if _is_careers(url, text):
+                return name
+            continue
         if any(term in haystack for term in terms):
             return name
     return None
@@ -285,6 +324,8 @@ def _priority_links(base_url: str, soup: BeautifulSoup, limit: int = 4) -> list[
         haystack = (parsed.path + " " + anchor.get_text(" ", strip=True)).casefold()
         for name, terms in PRIORITY_CATEGORIES:
             rank = next((index for index, term in enumerate(terms) if term in haystack), None)
+            if name == "careers" and rank is not None and not _is_careers(url, anchor.get_text(" ", strip=True)):
+                rank = None  # "jobben" in a DIY article is not a careers link
             if rank is None:
                 continue
             current = best.get(name)
@@ -467,6 +508,56 @@ def job_postings(structured: dict[str, Any] | None) -> list[dict[str, Any]]:
     return jobs[:50]
 
 
+# v6: open positions listed on the verified site's careers page (own job pages, or the company's ATS listing).
+ATS_HOSTS = ("webcruiter.no", "webcruiter.com", "jobbnorge.no", "recman.no", "recman.page", "teamtailor.com", "hrmanager.no",
+             "easycruit.com", "reachmee.com", "jobylon.com", "workable.com", "varbi.com", "talentech.com", "cvpartner.com",
+             "finn.no")
+JOB_PATH = re.compile(r"(stilling|jobb|job|karriere|career|vacanc|ledig|rekrutt|position|utlysning|apply|soknad|søknad)", re.I)
+NOT_JOB_TEXT = re.compile(r"^(?:les mer|read more|se alle|see all|søk her|søk nå|apply|tilbake|back|kontakt|meny|menu|mer|more|"
+                          r"ledige stillinger|stillinger|karriere|careers?|jobs?|jobb hos oss|open positions|alle stillinger|"
+                          r"åpen søknad|open application|generell søknad)$", re.I)
+
+
+def careers_listing_items(base_url: str, soup: BeautifulSoup, html_text: str | None = None) -> list[dict[str, Any]]:
+    """Job ads linked from a careers page: same-site pages one level below a job path, or an ATS posting URL. The anchor
+    text is the ad title; navigation, header/footer and 'open application' links are not ads."""
+    base = urllib.parse.urlparse(base_url)
+    base_domain = _registered_domain(base_url)
+    base_path = base.path.rstrip("/")
+    found: dict[str, dict[str, Any]] = {}
+    for anchor in soup.select("a[href]"):
+        if anchor.find_parent(["header", "footer", "nav"]) or link_location(anchor) != "body":
+            continue
+        href = str(anchor.get("href") or "").strip()
+        url = urllib.parse.urljoin(base_url, href)
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in {"http", "https"}:
+            continue
+        host = (parsed.hostname or "").casefold().removeprefix("www.")
+        title = " ".join(anchor.get_text(" ", strip=True).split())[:200]
+        if len(title) < 6 or NOT_JOB_TEXT.match(title) or len(title.split()) > 14 \
+                or re.fullmatch(r"(?:https?://)?(?:www\.)?[\w.-]+\.[a-z]{2,6}(?:/\S*)?", title, re.I) \
+                or re.fullmatch(r"(?:se |les |søk |apply |view )?(?:annonse|stillingen|på finn|on finn|finn|webcruiter|jobbnorge|teamtailor)\.?", title, re.I):
+            continue  # the anchor names the job board, not the job: the ad's title is unknown
+        path = parsed.path.rstrip("/")
+        ats = next((item for item in ATS_HOSTS if host == item or host.endswith("." + item)), None)
+        if ats == "finn.no" and "/job/" not in parsed.path:
+            continue
+        if ats:
+            kind = "ats_listing"
+            if not re.search(r"\d{3,}|/jobs?/|/stilling|/position|/vacanc|/job/", parsed.path + "?" + parsed.query, re.I):
+                continue  # a posting, not the ATS front page
+        elif _registered_domain(url) == base_domain and path.startswith(base_path + "/") and path != base_path \
+                and JOB_PATH.search(base_path + path) and len([part for part in path[len(base_path):].split("/") if part]) == 1:
+            kind = "site_job_page"
+        else:
+            continue
+        clean = urllib.parse.urlunparse(parsed._replace(fragment=""))
+        found.setdefault(clean, {"title": title, "url": clean, "kind": kind,
+                                 "claim_span": f'{raw_attribute(html_text, "href", href)}>{title}'})
+    return list(found.values())[:15]
+
+
 def _fetch_secondary_page(url: str, *, homepage_domain: str, timeout: float, max_bytes: int, probe: bool = False) -> tuple[dict[str, Any] | None, list[dict[str, str]], int, int, int, str | None]:
     robots_request = 0 if robots_cached(url) else 1
     if not _robots_allowed(url, timeout):
@@ -507,6 +598,8 @@ def _fetch_secondary_page(url: str, *, homepage_domain: str, timeout: float, max
         }
         if page["category"] == "news":
             page["news_items"] = news_listing_items(final_url, page_soup)
+        if page["category"] == "careers":
+            page["listed_jobs"] = careers_listing_items(final_url, page_soup, page_html)
         if page["category"] == "identity" or probe:
             page["category"] = page["category"] or "identity"
             page["site_contact"] = site_contact(final_url, page_soup, [], html_text=page_html, page_sha256=page_sha256)

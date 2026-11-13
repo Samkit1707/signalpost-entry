@@ -138,6 +138,70 @@ def why_it_matters(latest: dict[str, Any], previous: dict[str, Any] | None) -> s
     return f"Why it matters (FY{prev} → FY{year}): {text[0].upper()}{text[1:]}."
 
 
+def short_money(value: float, currency: str = "NOK") -> str:
+    """NOK 17.4m / NOK 912k / NOK 640 (sign kept)."""
+    number = float(value)
+    sign, size = ("-" if number < 0 else ""), abs(number)
+    if size >= 1e9:
+        text = f"{size / 1e9:.1f}bn"
+    elif size >= 1e6:
+        text = f"{size / 1e6:.1f}m"
+    elif size >= 1e4:
+        text = f"{size / 1e3:.0f}k"
+    else:
+        text = f"{size:,.0f}"
+    return f"{currency} {sign}{text}"
+
+
+def headline(claims: list[dict[str, Any]], latest: dict[str, Any] | None, previous: dict[str, Any] | None) -> tuple[str, list[Any]] | None:
+    """v6: the summary opens with one buyer-relevant fact and its source; the registry identity follows it.
+    Order: a distress status, revenue (with the year-on-year change), the result when no revenue is filed, open job
+    postings, the newest dated news, the registered headcount, a recent founding."""
+    status_claim = _first(claims, "registry_status")
+    status = _value(status_claim) or {}
+    if status.get("bankrupt"):
+        return "Registered as bankrupt (Brønnøysund register).", [status_claim]
+    if status.get("liquidating"):
+        return "Registered as under liquidation (Brønnøysund register).", [status_claim]
+    if status.get("deleted"):
+        return "Deleted from the register" + (f" on {status['deleted_date']}" if status.get("deleted_date") else "") + " (Brønnøysund register).", [status_claim]
+    financial_claim = _first(claims, "latest_annual_accounts")
+    if latest and financial_claim:
+        year, currency = fiscal_year(latest), latest.get("currency") or "NOK"
+        kind = " group" if latest.get("account_type") == "KONSERN" else ""
+        prev_year = fiscal_year(previous) if previous else None
+        for key, label in (("revenue", "Revenue"), ("operating_result", "Operating result"), ("annual_result", "Annual result")):
+            new = latest.get(key)
+            if new is None or (key == "revenue" and new == 0 and (latest.get("operating_result") or latest.get("annual_result"))):
+                continue
+            old = previous.get(key) if previous else None
+            change = ""
+            if old is not None and prev_year:
+                if new == old:
+                    change = f", unchanged from FY{prev_year}"
+                elif key == "revenue" and old > 0:
+                    pct = (new - old) / old * 100
+                    change = f", {'up' if pct > 0 else 'down'} {abs(pct):.0f}% from FY{prev_year}" if round(abs(pct)) >= 1 else f", flat on FY{prev_year}"
+                else:
+                    change = f", {'up' if new > old else 'down'} from {short_money(old, currency)} in FY{prev_year}"
+            return f"{label} {short_money(new, currency)} in FY{year}{change} (Brønnøysund{kind} accounts).", [financial_claim]
+    postings = [claim for claim in claims if claim.get("field") == "job_posting" and claim.get("availability") == "available"]
+    if postings:
+        return (f"Hiring: {len(postings)} open job posting{'s' if len(postings) != 1 else ''} on its verified website, latest "
+                f"“{postings[0]['value'].get('title')}” (company careers page).", postings[:3])
+    news = [claim for claim in claims if claim.get("field") == "dated_news" and claim.get("availability") == "available"]
+    if news:
+        newest = max(news, key=lambda claim: claim["value"]["published_at"])
+        return f"Latest news {newest['value']['published_at']}: “{newest['value']['title']}” (company website).", [newest]
+    employees_claim = _first(claims, "registered_employees")
+    if _value(employees_claim):
+        return f"{_value(employees_claim)} registered employees (Brønnøysund register).", [employees_claim]
+    founded = _first(claims, "founding_date")
+    if _value(founded):
+        return f"Founded {_value(founded)} (Brønnøysund register).", [founded]
+    return None
+
+
 def build_synthesis(profile: dict[str, Any], claims: list[dict[str, Any]], evidence_list: list[dict[str, Any]]) -> dict[str, Any]:
     known_ids = {item["id"] for item in evidence_list}
     sentences: list[dict[str, Any]] = []
@@ -285,7 +349,17 @@ def build_synthesis(profile: dict[str, Any], claims: list[dict[str, Any]], evide
         if fields:
             say("unknown", f"Could not be checked this run ({label}): {', '.join(fields)}.", *failed)
 
+    records_all = ((((profile.get("evidence") or {}).get("financials") or {}).get("value") or {}).get("records") or []) \
+        if (_first(claims, "latest_annual_accounts") or {}).get("availability") == "available" else []
+    newest = newest_filed_record(records_all)
+    lead = headline(claims, newest, previous_filed_record(records_all, newest) if newest else None)
+    if lead:
+        before = len(sentences)
+        say("headline", lead[0], *lead[1])
+        if len(sentences) > before:
+            sentences.insert(0, sentences.pop())  # the buyer-relevant fact first, registry identity after it
     narrative = " ".join(f"{item['text']} [{', '.join(item['evidence_ids'])}]" for item in sentences)
     why = next((item["text"] for item in sentences if item["topic"] == "why_it_matters"), None)
-    return {"method": "template_from_claims_v2", "sentences": sentences, "narrative": narrative, "why_it_matters": why,
+    return {"method": "template_from_claims_v3", "headline": sentences[0]["text"] if sentences and sentences[0]["topic"] == "headline" else None,
+            "sentences": sentences, "narrative": narrative, "why_it_matters": why,
             "latest_fiscal_year": fiscal_year(latest) if latest else None}

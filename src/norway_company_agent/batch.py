@@ -10,6 +10,7 @@ from .contract import contract_fields
 from .enrichment import quarantine_unowned_site
 from .evidence import evidence, utc_now
 from .official import accounting_obligation_assessment
+from .public import diagnostics_record, guard_urls, public_profile, strip_claim_diagnostics  # noqa: F401
 from .sampling import iter_bulk
 from .synthesis import build_synthesis
 
@@ -158,6 +159,7 @@ def terminal_envelope(
     modules: Iterable[str],
     started_at: str,
     completed_at: str,
+    guard_log: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     quarantine_unowned_site(profile)  # nothing from a site that is not this company's own stays attached
     repaired = repair_records(profile)  # no record carries a value under a not-found state, none is available and empty
@@ -176,17 +178,26 @@ def terminal_envelope(
                                                  "kind": "record", "problem": item["problem"], "new_state": item["action"]}
                                                 for item in repaired]
     entity_state = "submission_error" if any(item["state"] == "submission_error" for item in module_states.values()) else "complete"
-    return {
+    synthesis = build_synthesis(profile, contract["claims"], contract["evidence"])
+    # v6: only verified links leave the agent (see public.py): no rejected candidates, raw page data or diagnostics.
+    strip_claim_diagnostics(contract["claims"])
+    envelope = {
         "run_id": run_id,
         "organisation_number": profile["organisation_number"],
         "state": entity_state,
         "started_at": started_at,
         "completed_at": completed_at,
         "modules": module_states,
-        "profile": profile,
+        "profile": public_profile(profile),
         **contract,
-        "synthesis": build_synthesis(profile, contract["claims"], contract["evidence"]),
+        "synthesis": synthesis,
     }
+    removed = guard_urls(envelope)
+    envelope["link_guard"] = {"rule": "only the registry, Wikidata, the verified website and verified profiles are linked",
+                              "removed": len(removed)}
+    if guard_log is not None:
+        guard_log.extend({"organisation_number": profile["organisation_number"], **item} for item in removed)
+    return envelope
 
 
 def validate_envelopes(envelopes: list[dict[str, Any]], expected_count: int) -> dict[str, Any]:

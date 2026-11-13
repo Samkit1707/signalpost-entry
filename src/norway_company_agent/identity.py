@@ -254,6 +254,73 @@ def footer_registry_proof(profile: dict[str, Any], value: dict[str, Any]) -> dic
     return {"name_with_detail": False, "details": any_detail, "page": None}
 
 
+# --- v6: a site whose own address, phone or identity text points to another country -------------------------------
+US_STATES = ("AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK "
+             "OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC").split()
+_US_STATE_ZIP = re.compile(r"\b(?:" + "|".join(US_STATES) + r")\s*,?\s+\d{5}(?:-\d{4})?\b")
+_US_STATE_NAME_ZIP = re.compile(r"\b(?:Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|"
+                                r"Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|"
+                                r"Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|"
+                                r"North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|"
+                                r"South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming)"
+                                r"\s*,?\s+\d{5}(?:-\d{4})?\b")
+_CITY_STATE_END = re.compile(r",\s*(?:" + "|".join(US_STATES) + r")\s*$")
+_US_PHONE = re.compile(r"(?<![\d+])(?:\+|00)1[\s.(-]*\d{3}[\s.)-]*\d{3}[\s.-]*\d{4}(?!\d)|\(\d{3}\)\s?\d{3}-\d{4}(?!\d)")
+_USA_WORDS = re.compile(r"\b(?:USA|U\.S\.A\.?|United States(?: of America)?)\b")
+NORWAY_COUNTRY = {"no", "nor", "norway", "norge", "noreg", "norwegen", "norvege"}
+
+
+def _jsonld_countries(value: Any) -> list[str]:
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key == "addressCountry":
+                name = child.get("name") if isinstance(child, dict) else child
+                if isinstance(name, str) and name.strip():
+                    found.append(name.strip())
+            else:
+                found.extend(_jsonld_countries(child))
+    elif isinstance(value, list):
+        for child in value:
+            found.extend(_jsonld_countries(child))
+    return found
+
+
+def foreign_country_signals(value: dict[str, Any]) -> list[str]:
+    """Signals in the site's own identity (JSON-LD address, title, description, footer/contact block, contact details)
+    that the business is in another country: a non-Norwegian JSON-LD addressCountry, a US state + ZIP, 'City, ST' in
+    the title, a +1/(nnn) nnn-nnnn phone, or the words USA / United States."""
+    signals: list[str] = []
+    for country in _jsonld_countries(value.get("structured_organisations") or []):
+        if _fold(country).strip(". ") not in NORWAY_COUNTRY:
+            signals.append(f"JSON-LD addressCountry {country!r}")
+    contact = value.get("site_contact") or {}
+    contact_texts = [str(item.get(key) or "") for item in contact.get("organisations") or [] for key in ("address", "telephone")]
+    contact_texts += [str(item) for item in contact.get("phones") or []]
+    own_texts = [str(value.get("title") or ""), str(value.get("description") or ""), str(value.get("identity_text_excerpt") or ""),
+                 *[str(page.get("identity_text_excerpt") or "") for page in value.get("pages") or []], *contact_texts]
+    all_texts = own_texts + [str(value.get("main_text_excerpt") or ""), *[str(page.get("main_text_excerpt") or "") for page in value.get("pages") or []]]
+    title = " ".join(str(value.get("title") or "").split())
+    for text in all_texts:
+        flat = " ".join(text.split())
+        for pattern, label in ((_US_STATE_ZIP, "US state + ZIP"), (_US_STATE_NAME_ZIP, "US state + ZIP"), (_US_PHONE, "+1 / US phone")):
+            match = pattern.search(flat)
+            if match:
+                signals.append(f"{label} {match.group(0)!r}")
+    if _CITY_STATE_END.search(title.split("|")[-1].strip()) or any(_CITY_STATE_END.search(part.strip()) for part in title.split("|")):
+        signals.append(f"title ends in a US state code ({title!r})")
+    for text in own_texts:
+        match = _USA_WORDS.search(" ".join(text.split()))
+        if match:
+            signals.append(f"site's own identity text says {match.group(0)!r}")
+    return list(dict.fromkeys(signals))
+
+
+# v6: only the registry's own website entry may be proven by name; every other candidate (registry e-mail domain,
+# Wikidata P856, name variants on .no or .com, sub-unit names) needs the exact organisation number printed on it.
+REGISTRY_LISTED_SOURCES = {"registry_linked_company_website", "registry_linked_company_website_scrapy"}
+
+
 # Paths that still count as the site root (index files and language roots).
 ROOT_PATHS = {"", "/index.html", "/index.htm", "/index.php", "/index.asp", "/index.aspx", "/no", "/nb", "/nn", "/en", "/hjem", "/home"}
 
@@ -396,6 +463,17 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
         score = 0.6
         reasons.append("landed on " + ("another domain" if landing["cross_domain_redirect"] else "a page below the site root")
                        + f" ({value.get('final_url')}); only the exact organisation number can prove identity there")
+    foreign = foreign_country_signals(value)
+    if foreign and score < 1.0:
+        score = min(score, 0.3)
+        reasons.append("site's own address/phone/text points to another country (" + "; ".join(foreign[:3])
+                       + ") and it does not print this organisation number: not published")
+    source_type = str(website.get("source_type") or "registry_linked_company_website")
+    registry_listed = source_type in REGISTRY_LISTED_SOURCES
+    if not registry_listed and score < 1.0 and score >= 0.3:
+        score = min(score, 0.6)
+        reasons.append(f"domain is not the registry's website entry (found via {source_type.replace('_', ' ')}): "
+                       "only the exact organisation number printed on the site can prove it")
     if proof["name_with_detail"] and score >= 0.9:
         reasons.append(f"full legal name and registry {'/'.join(proof['details'])} appear together in the site's own footer/contact block {proof['page']}")
     status = "exact" if score >= 0.9 else "review" if score >= 0.8 else "related_or_uncertain"
@@ -411,14 +489,16 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
         "requires_org_number": requires_org_number,
         "group_site": group_site,
         "other_entity_site": other_entity_site,
-        "method": "deterministic_name_org_evidence_v5",
+        "foreign_country_signals": foreign,
+        "registry_listed": registry_listed,
+        "method": "deterministic_name_org_evidence_v6",
     }
 
 
 # v5: where on the company's own page a profile link may sit to count as the company's own profile.
 OWN_PROFILE_LOCATIONS = {"footer", "header", "jsonld_same_as"}
 # Words a handle may add to the company or brand name ("jaeder.as", "kontorlev.no", "fiskeeksportnorge").
-HANDLE_SUFFIXES = {"as", "asa", "no", "norge", "norway", "official", "offisiell", "the"}
+HANDLE_SUFFIXES = {"as", "asa", "no", "norge", "norway", "official", "offisiell", "the", "group", "gruppen", "konsern"}
 # Path segments that are a platform's own words, not the company's handle.
 HANDLE_PREFIXES = {"company", "channel", "user", "c", "pages", "pg", "people"}
 
@@ -466,6 +546,31 @@ def site_brands(value: dict[str, Any] | None) -> list[str]:
     return [compact] if len(compact) >= 3 and not compact.isdigit() else []
 
 
+# v6: accounts of site builders, hosts, theme shops and the platforms themselves. A template's JSON-LD sameAs or a
+# footer credit often links these (v5 shipped twitter.com/squarespace for LØWEHJERTE DESIGN AS).
+VENDOR_HANDLES = {
+    "squarespace", "wix", "wixcom", "wixofficial", "wordpress", "wordpressdotcom", "wordpresscom", "wpengine", "shopify",
+    "shopifyplus", "webflow", "webflowapp", "godaddy", "onecom", "onecomgroup", "jimdo", "weebly", "strikingly", "hubspot",
+    "mailchimp", "elementor", "themeforest", "envato", "envatomarket", "divi", "elegantthemes", "woocommerce", "cloudflare",
+    "facebook", "facebookapp", "meta", "instagram", "twitter", "x", "linkedin", "youtube", "tiktok", "google", "googlemaps",
+    "pinterest", "snapchat", "apple", "microsoft", "yelp", "tripadvisor", "booking", "bookingcom", "visma", "tripletex",
+    "mamutnorge", "domeneshop", "webhuset", "proisp", "servebolt", "makeweb", "123hjemmeside", "hjemmesideno", "zyrex",
+    "framer", "carrd", "duda", "sitejet", "ionos", "hostinger", "bluehost", "namecheap", "uniweb", "smartweb", "enonic",
+    "craftcms", "joomla", "drupal", "ghost", "medium", "typeform", "calendly", "trustpilot", "gulesider", "proff", "1881",
+}
+
+
+def vendor_handle(slug: str) -> str | None:
+    """The blocklisted vendor/platform name a handle is (or is plus a suffix like 'norge'/'official'), else None."""
+    for handle in _compact_variants(slug or ""):
+        if handle in VENDOR_HANDLES:
+            return handle
+        for vendor in VENDOR_HANDLES:
+            if len(vendor) >= 4 and handle.startswith(vendor) and _segments(handle[len(vendor):], HANDLE_SUFFIXES | {"official", "inc", "hq", "app"}) is not None:
+                return vendor
+    return None
+
+
 def assess_social_identity(profile: dict[str, Any], link: dict[str, str], brands: list[str] | None = None) -> dict[str, Any]:
     """A profile linked from the company's own site is the company's when its handle is the legal name or the site's
     brand (high), or is made only of legal-name words and the brand with at least one distinctive word (medium).
@@ -478,7 +583,12 @@ def assess_social_identity(profile: dict[str, Any], link: dict[str, str], brands
     location = link.get("location")
     brands = [brand for brand in brands or [] if brand]
     confidence, reason, parts = None, "", None
-    if location is not None and location not in OWN_PROFILE_LOCATIONS:
+    blocked = vendor_handle(slug)
+    if blocked and blocked not in _compact_variants(str(profile.get("name") or "")) and blocked != core_compact:
+        reason = f"handle '{slug}' is a platform/vendor account ({blocked}), not the company's own profile"
+    elif location == "credit":
+        reason = "linked from a 'powered by' / design-credit line: the vendor's or agency's profile, not the company's"
+    elif location is not None and location not in OWN_PROFILE_LOCATIONS:
         reason = f"linked only from the page {location.replace('_', ' ')}, not from the site's header, footer or JSON-LD sameAs"
     elif not slug:
         reason = "profile URL carries only a numeric or channel id, so the handle cannot be matched to the company"

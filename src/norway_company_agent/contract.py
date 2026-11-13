@@ -481,6 +481,8 @@ def contract_fields(profile: dict[str, Any], module_states: dict[str, dict[str, 
     for item in (profile.get("website_discovery") or {}).get("candidates") or []:
         if item.get("group_site") and item.get("final_url"):
             group_sites.append((item["final_url"], item["group_site"], item.get("retrieved_at")))
+    # v6: a group/parent site is another legal entity's site; a link to it reads as a wrong-company website. Not emitted.
+    group_sites = []
     for url, label, retrieved in {url: (url, label, retrieved) for url, label, retrieved in group_sites}.values():
         entry = {"source_url": label.get("page_url") or url, "source_class": "company_owned", "retrieved_at": retrieved,
                  "content_sha256": label.get("content_sha256"), "claim_span": label.get("claim_span"), "span_kind": "quote"}
@@ -633,8 +635,13 @@ def _dated_news_claims(record: dict[str, Any], state: str, confidence: float | N
         if not cited(entry):
             withheld.append({"field": "dated_news", "module": "dated_news", "reason": "no exact span or hash"})
             continue
+        match = item.get("company_match") or {}
+        mention = " ".join(str(item.get("company_mention") or "").split())[:240]
+        proof = (f"article on the verified company site {match.get('verified_site') or ''}"
+                 + (f"; names the company: “{mention}”" if mention else "")).strip()
         claims.append({"field": "dated_news", "availability": "available", "confidence": confidence,
-                       "value": {key: item.get(key) for key in ("title", "url", "published_at", "source_kind")},
+                       "value": {**{key: item.get(key) for key in ("title", "url", "published_at", "source_kind")},
+                                 "published_date": item.get("published_at"), "company_match": proof},
                        "as_of": item.get("published_at"), "evidence_ids": [add_evidence("dated_news", entry)], "module": "dated_news"})
         published += 1
     if published:

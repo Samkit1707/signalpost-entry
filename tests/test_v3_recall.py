@@ -1,6 +1,8 @@
 """Offline tests for v3 recall: fact-level claims, ordered website candidates, stricter identity, site contact facts."""
 from __future__ import annotations
 
+import json
+
 import sys
 from pathlib import Path
 
@@ -180,10 +182,9 @@ def test_group_site_is_labelled_never_published():
     full["evidence"]["website"] = gated["website"]
     env = envelope(full)
     assert next(c for c in env["claims"] if c["field"] == "official_website")["value"] is None
-    group_claim = next(c for c in env["claims"] if c["field"] == "group_website")
-    assert group_claim["value"]["group_organisation_numbers"] == [OTHER]
-    proof = next(item for item in env["evidence"] if item["id"] == group_claim["evidence_ids"][0])
-    assert f"org.nr {OTHER}" in proof["claim_span"] and proof["content_sha256"] == "7" * 64  # quoted from the fetched page
+    # v6: the group's site is another legal entity's: no group_website claim and no link to it anywhere in the envelope
+    assert not [c for c in env["claims"] if c["field"] == "group_website"]
+    assert "fjordkonsern.no" not in json.dumps(env)
 
 
 # --- C: more from each verified site ---------------------------------------------------------------------------------
@@ -237,10 +238,10 @@ def test_name_derived_com_needs_the_printed_org_number():
     footer = "Fjord Bakeri AS · Strandgata 21 · 4307 Sandnes"
     fetch = lambda url, source_type, probe=False, probe_terms=None, **_: (  # noqa: E731
         site_record(url, footer=footer, title="Fjord Bakeri AS"), {"requests": 2, "bytes": 1, "latencies_ms": []})
-    # name + two registry details proves a .no candidate ...
+    # v6: name + two registry details proves neither a .no candidate ...
     accepted, _, _ = discover_website(bare("Fjord Bakeri AS"), fetch, apply_website_identity_gate, resolver=lambda host: True)
-    assert accepted and accepted["source_url"].endswith(".no/")
-    # ... but not a .com one
+    assert accepted is None
+    # ... nor a .com one
     accepted, _, trail = discover_website(bare("Fjord Bakeri AS"), fetch, apply_website_identity_gate,
                                           resolver=lambda host: host.endswith(".com"))
     assert accepted is None and any(item["candidate"].endswith(".com") and item["result"] == "available" for item in trail)

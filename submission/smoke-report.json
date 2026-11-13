@@ -1,7 +1,7 @@
 {
-  "run_id": "smoke-v5",
-  "started_at": "2026-11-01T09:23:08.059196Z",
-  "completed_at": "2026-11-01T09:24:53.535207Z",
+  "run_id": "v6-smoke-100",
+  "started_at": "2026-11-13T19:19:22.958680Z",
+  "completed_at": "2026-11-13T19:21:26.875751Z",
   "expected_count": 100,
   "emitted_envelopes": 100,
   "resumed_profiles": 0,
@@ -31,17 +31,17 @@
   },
   "registry_download": {
     "source": "supplied",
-    "path": "/Users/macbook/Downloads/signalpost-entry/cache/brreg-enheter.csv.gz",
+    "path": "cache/brreg-enheter.csv.gz",
     "requests": 0
   },
   "operations": {
-    "requests": 912,
-    "bytes": 41847816,
-    "p50_ms": 252,
-    "p95_ms": 2295,
-    "requests_per_company": 9.12,
-    "projected_requests_for_1000": 9120,
-    "runtime_ms": 107394
+    "requests": 895,
+    "bytes": 37912590,
+    "p50_ms": 255,
+    "p95_ms": 3428,
+    "requests_per_company": 8.95,
+    "projected_requests_for_1000": 8950,
+    "runtime_ms": 127627
   },
   "budget": {
     "max_requests": null,
@@ -52,9 +52,9 @@
     "enabled": true,
     "status": "ok",
     "indexed_organisations": 1,
-    "requests": 1,
-    "cached": false,
-    "retrieved_at": "2026-11-01T09:23:30.183336Z",
+    "requests": 0,
+    "cached": true,
+    "retrieved_at": "2026-11-13T19:15:17.409796Z",
     "content_sha256": "e4fb8cf085da969b99a4309d7cf12fae7dbfad221e699e7498bb7f72b31edd52"
   },
   "coverage": {
@@ -63,15 +63,15 @@
     "registry_live": 100,
     "financials": 100,
     "roles": 100,
-    "group": 8,
+    "group": 9,
     "locations": 74,
     "wikidata_footprint": 1,
-    "website": 11,
+    "website": 9,
     "workforce": 10,
     "external_profiles": 2,
     "company_activity": 0,
-    "company_jobs": 1,
-    "dated_news": 3
+    "company_jobs": 0,
+    "dated_news": 2
   },
   "validation": {
     "passed": true,
@@ -84,7 +84,7 @@
     },
     "invalid_states": [],
     "citations": {
-      "published_claims": 3773,
+      "published_claims": 3795,
       "claims_outside_the_six_contract_states": 0,
       "published_claims_missing_hash": 0,
       "published_claims_missing_span": 0,
@@ -99,29 +99,23 @@
   },
   "links": {
     "published": {
-      "jobs": {
-        "high": 1,
-        "medium": 0,
-        "none": 0,
-        "companies": 1
-      },
       "news": {
         "high": 0,
-        "medium": 12,
+        "medium": 11,
         "none": 0,
-        "companies": 3
+        "companies": 2
       },
       "social": {
-        "high": 4,
+        "high": 3,
         "medium": 0,
         "none": 0,
         "companies": 2
       },
       "website": {
         "high": 5,
-        "medium": 1,
+        "medium": 0,
         "none": 0,
-        "companies": 6
+        "companies": 5
       }
     },
     "social_profiles": {
@@ -131,29 +125,132 @@
       "medium": 0
     },
     "websites_by_method": {
-      "name_variant": 5,
+      "name_variant": 4,
       "registry_hjemmeside": 1
     },
-    "candidates_not_published": {
-      "news": 4,
-      "social": 3
-    }
+    "candidates_not_published": {}
+  },
+  "link_guard": {
+    "removed_from_envelopes": 43,
+    "examples": [
+      {
+        "organisation_number": "914561302",
+        "path": "profile.evidence.registry.value.hjemmeside",
+        "text": "www.appelx.no"
+      },
+      {
+        "organisation_number": "914561302",
+        "path": "profile.evidence.registry_live.value.website",
+        "text": "www.appelx.no"
+      },
+      {
+        "organisation_number": "914561302",
+        "path": "profile.evidence.company_activity.source_url",
+        "text": "https://www.studiox.no/"
+      },
+      {
+        "organisation_number": "914561302",
+        "path": "profile.evidence.company_jobs.source_url",
+        "text": "https://www.studiox.no/"
+      },
+      {
+        "organisation_number": "914561302",
+        "path": "evidence[12].source_url",
+        "text": "https://www.studiox.no/"
+      },
+      {
+        "organisation_number": "999288448",
+        "path": "profile.evidence.registry.value.hjemmeside",
+        "text": "www.betakst.no"
+      },
+      {
+        "organisation_number": "999288448",
+        "path": "profile.evidence.registry_live.value.website",
+        "text": "www.betakst.no"
+      },
+      {
+        "organisation_number": "999288448",
+        "path": "profile.evidence.company_activity.source_url",
+        "text": "https://www.betakst.no/"
+      },
+      {
+        "organisation_number": "999288448",
+        "path": "profile.evidence.company_jobs.source_url",
+        "text": "https://www.betakst.no/"
+      },
+      {
+        "organisation_number": "999288448",
+        "path": "evidence[12].claim_span",
+        "text": "www.betakst.no"
+      },
+      {
+        "organisation_number": "935354293",
+        "path": "profile.evidence.registry.value.hjemmeside",
+        "text": "www.7-eleven.no"
+      },
+      {
+        "organisation_number": "935354293",
+        "path": "profile.evidence.registry_live.value.website",
+        "text": "www.7-eleven.no"
+      },
+      {
+        "organisation_number": "935354293",
+        "path": "profile.evidence.company_activity.source_url",
+        "text": "https://7-eleven.no/"
+      },
+      {
+        "organisation_number": "935354293",
+        "path": "profile.evidence.company_jobs.source_url",
+        "text": "https://7-eleven.no/"
+      },
+      {
+        "organisation_number": "935354293",
+        "path": "evidence[12].source_url",
+        "text": "https://7-eleven.no/"
+      },
+      {
+        "organisation_number": "827340162",
+        "path": "profile.evidence.website.value.requested_url",
+        "text": "https://novooi.no/"
+      },
+      {
+        "organisation_number": "827340162",
+        "path": "profile.evidence.website.value.social_links[1].reason",
+        "text": "novooi.no"
+      },
+      {
+        "organisation_number": "827340162",
+        "path": "profile.evidence.external_profiles.value.profiles[1].identity_proof[0]",
+        "text": "novooi.no"
+      },
+      {
+        "organisation_number": "827340162",
+        "path": "profile.website_discovery.published_candidate.domain",
+        "text": "novooi.no"
+      },
+      {
+        "organisation_number": "827340162",
+        "path": "claims[56].value.identity_proof",
+        "text": "novooi.no"
+      }
+    ],
+    "diagnostics_file": "out/v6smoke/envelopes.diagnostics.jsonl"
   },
   "site": {
     "status": "ok",
-    "path": "/Users/macbook/Downloads/signalpost-entry/out/v5eval/smoke-site/index.html",
-    "run_id": "smoke-v5",
-    "completed_at": "2026-11-01T09:24:53.535207Z",
+    "path": "out/v6smoke/site/index.html",
+    "run_id": "v6-smoke-100",
+    "completed_at": "2026-11-13T19:21:26.875751Z",
     "companies": 100,
     "company_pages": 100,
     "with_summary": 100,
-    "with_verified_website": 6,
-    "with_dated_news": 3,
+    "with_verified_website": 5,
+    "with_dated_news": 2,
     "entry": "index.html",
     "compare": "compare.html"
   },
   "synthesis": {
     "envelopes_with_summary": 100,
-    "sentences": 1002
+    "sentences": 1099
   }
 }
