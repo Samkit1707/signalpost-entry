@@ -243,6 +243,9 @@ def _website_proof(profile: dict[str, Any], value: dict[str, Any]) -> tuple[str,
     parts = [(value.get(key), *homepage) for key in ("identity_text_excerpt", "title", "description", "main_text_excerpt")]
     parts += [(page.get(key), page.get("url"), page.get("content_sha256")) for page in value.get("pages", [])
               for key in ("identity_text_excerpt", "main_text_excerpt", "title")]
+    # the exact line that printed the org number (homepage or a contact/privacy/terms page)
+    parts += [(line, page.get("url") or page.get("final_url"), page.get("content_sha256"))
+              for page in [value, *value.get("pages", [])] for line in page.get("org_number_lines") or []]
     for text, url, sha in parts:
         text = " ".join(str(text or "").split())
         if text and org_number_present(text, org):

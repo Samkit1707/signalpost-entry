@@ -89,7 +89,7 @@ GENERIC_EMAIL_DOMAINS = {
     "enivest.net", "tdcadsl.no", "ebnett.no", "haugnett.no", "nextgentel.com", "loqal.no", "kvamnet.no", "hesbynett.no",
     "sensewave.no", "tussa.com", "neasonline.no", "vikenfiber.no", "mimer.no", "post.com", "yandex.com", "mail.ru", "qq.com",
 }
-MAX_CANDIDATE_FETCHES = 6
+MAX_CANDIDATE_FETCHES = 8  # HTTP candidate homepages per company (DNS checks are free)
 
 
 def registry_email_domain(profile: dict[str, Any]) -> str | None:
@@ -105,18 +105,29 @@ def registry_email_domain(profile: dict[str, Any]) -> str | None:
     return domain.removeprefix("www.")
 
 
+def _alt_tokens(name: str | None) -> list[str]:
+    """The legal-name tokens with the long Norwegian transliteration (ø -> oe, å -> aa, æ -> ae)."""
+    text = str(name or "").translate(str.maketrans({"ø": "oe", "Ø": "OE", "å": "aa", "Å": "AA", "æ": "ae", "Æ": "AE"}))
+    return _tokens(text)
+
+
 def name_labels(name: str | None) -> list[str]:
-    """Legal name without legal-form suffix: joined, hyphenated, first two and first distinctive tokens."""
+    """Legal name without legal-form suffix, ø/å/æ as o/a/ae and as oe/aa/ae: joined, hyphenated, first two and
+    first distinctive tokens."""
     tokens = _tokens(name)
     if not tokens or any(token in SKIP_NAME_TOKENS for token in tokens) or all(token in GENERIC_LABEL_TOKENS for token in tokens):
         return []
-    tokens = tokens[:4]
-    labels = ["".join(tokens)]
-    if len(tokens) > 1:
-        labels.append("-".join(tokens))
+    labels: list[str] = []
+    for variant in (tokens[:4], _alt_tokens(name)[:4]):
+        if not variant:
+            continue
+        labels.append("".join(variant))
+        if len(variant) > 1:
+            labels.append("-".join(variant))
     if len(tokens) > 2:
         labels.append("".join(tokens[:2]))
-    distinctive = [token for token in tokens if token not in GENERIC_LABEL_TOKENS and not token.isdigit()]
+        labels.append("-".join(tokens[:2]))
+    distinctive = [token for token in tokens[:4] if token not in GENERIC_LABEL_TOKENS and not token.isdigit()]
     if len(tokens) > 1 and distinctive and len(distinctive[0]) >= 5:
         labels.append(distinctive[0])
     return [label for index, label in enumerate(labels) if 3 <= len(label) <= 63 and label not in labels[:index]]
@@ -127,7 +138,7 @@ def subunit_labels(profile: dict[str, Any]) -> list[str]:
     own = "".join(_tokens(profile.get("name")))
     labels = []
     for item in (((profile.get("evidence") or {}).get("locations") or {}).get("value") or {}).get("locations") or []:
-        for label in name_labels(item.get("name"))[:1]:
+        for label in name_labels(item.get("name"))[:2]:
             if label != own and label not in labels:
                 labels.append(label)
     return labels[:2]
@@ -149,10 +160,17 @@ def website_candidates(profile: dict[str, Any], tried: set[str] | None = None) -
     labels = name_labels(profile.get("name"))
     for label in labels:
         add(f"{label}.no", "name_variant")
-    for label in subunit_labels(profile):
+    subunits = subunit_labels(profile)
+    for label in subunits:
         add(f"{label}.no", "subunit_name")
-    for label in labels[:2]:
+    # .com last, full names only (a single word on .com is almost always someone else): joined and hyphenated name in
+    # both transliterations, then the first sub-unit name
+    tokens, alt = _tokens(profile.get("name"))[:4], _alt_tokens(profile.get("name"))[:4]
+    full = [label for label in ("".join(tokens), "-".join(tokens), "".join(alt), "-".join(alt)) if label in labels]
+    for label in full:
         add(f"{label}.com", "name_variant")
+    for label in subunits[:1]:
+        add(f"{label}.com", "subunit_name")
     return ordered
 
 
@@ -194,7 +212,8 @@ def discover_website(profile: dict[str, Any], fetch, gate, *, resolver=resolves,
         # A guessed host that resolves but does not answer within PROBE_TIMEOUT is not worth the run's p95
         # (on the smoke batch such hosts sat at the 15 s socket timeout and set p95 at 6-8 s).
         record, fetched = fetch("https://" + host + "/", source_type=source_type, probe=True,
-                                probe_terms=None if method == "registry_email_domain" else terms, timeout=PROBE_TIMEOUT)
+                                probe_terms=None if method == "registry_email_domain" else terms, timeout=PROBE_TIMEOUT,
+                                proof_org=str(profile.get("organisation_number") or "") or None)
         spend(fetched)
         gated = gate(profile, record)
         assessment = gated.get("assessment") or {}

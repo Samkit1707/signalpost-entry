@@ -54,6 +54,11 @@ def fetch_json(url: str, *, timeout: float = 20.0, attempts: int = 3) -> FetchRe
             if response.status in {404, 410}:
                 return FetchResult(url, response.status, elapsed, len(raw), error=f"HTTP {response.status}", content_sha256=hashlib.sha256(raw).hexdigest(), retrieved_at=_utc_now())
             last_error = f"HTTP {response.status}"
+            if response.status in {429, 503}:
+                retry_after = str(response.headers.get("Retry-After") or "").strip()
+                if retry_after.replace(".", "", 1).isdigit() and float(retry_after) <= 10 and attempt + 1 < attempts:
+                    time.sleep(float(retry_after))  # the server's own wait, honoured up to 10 s
+                    continue
         except (urllib3.exceptions.HTTPError, json.JSONDecodeError) as exc:
             last_error = type(exc).__name__
         if attempt + 1 < attempts:

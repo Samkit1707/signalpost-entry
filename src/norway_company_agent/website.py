@@ -95,6 +95,46 @@ _ROBOTS_CACHE: dict[str, Any] = {}
 _ROBOTS_LOCK = __import__("threading").Lock()
 
 
+# Retry once on 429/503 or a timeout; Retry-After is honoured up to 10 s (longer waits are not retried).
+RETRY_STATUSES = {429, 503}
+MAX_RETRY_AFTER = 10.0
+RETRY_STATS = {"retries": 0}
+_RETRY_LOCK = __import__("threading").Lock()
+
+
+def _retry_wait(exc: BaseException) -> float | None:
+    """Seconds to wait before the one retry, or None when the failure is not retryable."""
+    if isinstance(exc, urllib.error.HTTPError):
+        if exc.code not in RETRY_STATUSES:
+            return None
+        raw = str((exc.headers or {}).get("Retry-After") or "").strip()
+        if not raw:
+            return 1.0
+        try:
+            wait = float(raw)
+        except ValueError:
+            return None  # an HTTP-date: not worth parsing for one bounded retry
+        return wait if 0 <= wait <= MAX_RETRY_AFTER else None
+    reason = getattr(exc, "reason", exc)
+    if isinstance(exc, (TimeoutError, socket.timeout)) or isinstance(reason, (TimeoutError, socket.timeout)) or "timed out" in str(reason):
+        return 0.5
+    return None
+
+
+def open_with_retry(request: Any, timeout: float) -> Any:
+    """SAFE_OPENER.open with one retry on 429/503 (Retry-After <= 10 s) or a timeout."""
+    try:
+        return SAFE_OPENER.open(request, timeout=timeout)
+    except Exception as exc:  # noqa: BLE001
+        wait = _retry_wait(exc)
+        if wait is None:
+            raise
+        with _RETRY_LOCK:
+            RETRY_STATS["retries"] += 1
+        time.sleep(wait)
+        return SAFE_OPENER.open(request, timeout=timeout)
+
+
 def _robots_allowed(url: str, timeout: float) -> bool:
     """Return robots permission, fetching robots.txt at most once per scheme+host per process.
 
@@ -370,6 +410,91 @@ def probe_links(base_url: str, soup: BeautifulSoup, limit: int = 2) -> list[str]
     return ordered[:limit]
 
 
+# Coverage: pages where a Norwegian company prints its organisation number (contact, about, privacy, terms, imprint).
+PROOF_TERMS = (("kontakt", "contact"), ("om-oss", "om_oss", "om oss", "about", "hvem-er-vi", "selskapet"),
+               ("personvern", "privacy", "gdpr"), ("kjopsvilkar", "kjøpsvilkår", "salgsbetingelser", "vilkar", "vilkår", "terms", "betingelser"),
+               ("impressum", "juridisk", "legal", "informasjonskapsler", "cookie"))
+PROOF_PATHS = ("/kontakt", "/om-oss", "/personvern", "/privacy", "/vilkar", "/kjopsvilkar", "/salgsbetingelser", "/impressum")
+MAX_PROOF_PAGES = 6  # per candidate, the homepage included
+ORG_LINE = re.compile(r"(?<!\d)\d{3}[\s.\u00a0-]?\d{3}[\s.\u00a0-]?\d{3}(?!\d)")
+
+
+def proof_rank(url: str, text: str = "") -> int | None:
+    haystack = (urllib.parse.unquote(urllib.parse.urlparse(url).path) + " " + text).casefold()
+    return next((rank for rank, terms in enumerate(PROOF_TERMS) if any(term in haystack for term in terms)), None)
+
+
+def proof_links(base_url: str, soup: BeautifulSoup) -> list[str]:
+    """Same-host links whose path or anchor names a contact/about/privacy/terms/imprint page, in that order."""
+    base = urllib.parse.urlparse(base_url)
+    found: list[tuple[int, int, str]] = []
+    for index, anchor in enumerate(soup.select("a[href]")):
+        url = urllib.parse.urljoin(base_url, str(anchor.get("href") or "").strip())
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() != base.netloc.lower():
+            continue
+        clean = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path or "/", "", "", ""))
+        if clean.rstrip("/") == base_url.rstrip("/"):
+            continue
+        rank = proof_rank(clean, anchor.get_text(" ", strip=True))
+        if rank is not None:
+            found.append((rank, index, clean))
+    ordered: list[str] = []
+    for _, _, url in sorted(found):
+        if url not in ordered:
+            ordered.append(url)
+    return ordered
+
+
+def sitemap_proof_urls(base_url: str, timeout: float) -> tuple[list[str], int]:
+    """Proof-page URLs listed in /sitemap.xml (one level of sitemap index followed). Returns (urls, requests)."""
+    root = urllib.parse.urlunparse(urllib.parse.urlparse(base_url)._replace(path="/sitemap.xml", query="", fragment=""))
+    host = (urllib.parse.urlparse(base_url).hostname or "").casefold()
+    requests, urls = 0, []
+    queue = [root]
+    while queue and requests < 2:
+        url = queue.pop(0)
+        if not _robots_allowed(url, timeout):
+            break
+        requests += 1
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/xml,text/xml"})
+            with host_slot(url), open_with_retry(req, timeout) as response:
+                body = response.read(1_000_001).decode("utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            break
+        locs = [html_lib.unescape(item.strip()) for item in re.findall(r"<loc>\s*([^<]+?)\s*</loc>", body)]
+        if "<sitemapindex" in body:
+            children = [loc for loc in locs if (urllib.parse.urlparse(loc).hostname or "").casefold() == host]
+            pages = [loc for loc in children if re.search(r"page|side", loc, re.I)] or children
+            queue.extend(pages[:1])
+            continue
+        for loc in locs:
+            if (urllib.parse.urlparse(loc).hostname or "").casefold() == host and proof_rank(loc) is not None:
+                urls.append(loc)
+    urls.sort(key=lambda item: proof_rank(item) or 0)
+    return urls, requests
+
+
+def org_number_lines(soup: BeautifulSoup) -> list[str]:
+    """Visible text lines that carry a 9-digit (3-3-3) number: where a page prints an organisation number."""
+    lines = []
+    for line in soup.get_text("\n", strip=True).splitlines():
+        line = " ".join(line.split())
+        if ORG_LINE.search(line) and line not in lines:
+            lines.append(line[:300])
+        if len(lines) >= 10:
+            break
+    return lines
+
+
+def page_shows_org(page: dict[str, Any], org: str) -> bool:
+    digits = re.sub(r"\D", "", org)
+    pattern = r"(?<!\d)" + r"[\s.\u00a0-]?".join([digits[0:3], digits[3:6], digits[6:9]]) + r"(?!\d)"
+    text = " ".join([str(page.get("identity_text_excerpt") or ""), str(page.get("title") or ""), *[str(item) for item in page.get("org_number_lines") or []]])
+    return bool(len(digits) == 9 and re.search(pattern, text))
+
+
 def _postal_address(value: Any) -> str | None:
     if isinstance(value, str):
         return " ".join(value.split()) or None
@@ -566,7 +691,7 @@ def _fetch_secondary_page(url: str, *, homepage_domain: str, timeout: float, max
     started = time.monotonic()
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"})
     try:
-        with host_slot(url) as started, SAFE_OPENER.open(request, timeout=timeout) as response:
+        with host_slot(url) as started, open_with_retry(request, timeout) as response:
             raw = response.read(max_bytes + 1)
             elapsed = int((time.monotonic() - started) * 1000)
             final_url = response.geturl()
@@ -595,6 +720,7 @@ def _fetch_secondary_page(url: str, *, homepage_domain: str, timeout: float, max
             "declared_dates": page_dates(page_soup, page_structured, date_spans),
             "declared_date_spans": date_spans,
             "job_postings": job_postings(page_structured),
+            "org_number_lines": org_number_lines(page_soup),
         }
         if page["category"] == "news":
             page["news_items"] = news_listing_items(final_url, page_soup)
@@ -644,7 +770,8 @@ def _extraction_state(text: str, soup: BeautifulSoup) -> str:
 
 
 def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_000_000, source_type: str = "registry_linked_company_website",
-                  probe: bool = False, probe_terms: list[str] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+                  probe: bool = False, probe_terms: list[str] | None = None,
+                  proof_org: str | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     """Fetch a homepage and up to 4 category pages. probe=True (website candidates) instead checks at most 2
     identity pages (contact, about, legal), and only when the homepage mentions one of `probe_terms` (if given)."""
     supplied_url = str(url or "").strip()
@@ -661,7 +788,7 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
     started = time.monotonic()
     request = urllib.request.Request(normalized, headers={"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml"})
     try:
-        with host_slot(normalized) as started, SAFE_OPENER.open(request, timeout=timeout) as response:
+        with host_slot(normalized) as started, open_with_retry(request, timeout) as response:
             content_type = response.headers.get("content-type", "")
             raw = response.read(max_bytes + 1)
             elapsed = int((time.monotonic() - started) * 1000)
@@ -696,6 +823,7 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
             "declared_date_spans": homepage_date_spans,
             "job_postings": job_postings(structured),
             "identity_text_excerpt": identity_excerpt(soup),
+            "org_number_lines": org_number_lines(soup),
             "feed_links": feed_links(final_url, soup),
             "news_items": news_listing_items(final_url, soup, articles_only=True),
         }
@@ -707,10 +835,12 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
         bytes_received = len(raw)
         page_latencies = [elapsed]
         homepage_domain = value["registered_domain"]
+        mentions = True
         if probe:
             folded = " ".join([title, description, text, value["identity_text_excerpt"]]).casefold()
             mentions = probe_terms is None or any(term in folded for term in probe_terms)
-            page_urls = probe_links(final_url, soup) if mentions else []
+            # with an org number to look for, the proof pass below replaces the two fixed identity pages
+            page_urls = probe_links(final_url, soup) if mentions and not proof_org else []
         else:
             page_urls = _priority_links(final_url, soup)
         for page_url in page_urls:
@@ -730,6 +860,42 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
                 social.extend(page_social)
             elif page_error:
                 crawl_errors.append({"url": page_url, "error": page_error})
+        if proof_org and mentions and not page_shows_org({**value, "org_number_lines": value["org_number_lines"]}, proof_org) \
+                and not any(page_shows_org(page, proof_org) for page in pages[1:]):
+            # Coverage: look for the printed org number on contact/about/privacy/terms/imprint pages (links first, then
+            # sitemap.xml, then the usual paths), at most MAX_PROOF_PAGES pages per site with the homepage; stop when found.
+            fetched = {page.get("url") for page in pages} | {final_url}
+            budget = MAX_PROOF_PAGES - len(pages)
+            candidates = [url for url in proof_links(final_url, soup) if url not in fetched]
+            if len(candidates) < budget:
+                sitemap_urls, sitemap_requests = sitemap_proof_urls(final_url, timeout)
+                requests += sitemap_requests
+                candidates += [url for url in sitemap_urls if url not in candidates and url not in fetched]
+            if len(candidates) < budget:
+                root = urllib.parse.urlparse(final_url)
+                seen_paths = {urllib.parse.urlparse(url).path.rstrip("/").casefold() for url in candidates}
+                candidates += [urllib.parse.urlunparse((root.scheme, root.netloc, path, "", "", "")) for path in PROOF_PATHS
+                               if path not in seen_paths]
+            proof_tried = []
+            for page_url in candidates:
+                if budget <= 0:
+                    break
+                budget -= 1
+                page, page_social, page_requests, page_bytes, page_elapsed, page_error = _fetch_secondary_page(
+                    page_url, homepage_domain=homepage_domain, timeout=timeout, max_bytes=min(max_bytes, 1_000_000), probe=True)
+                requests += page_requests
+                bytes_received += page_bytes
+                if page_elapsed:
+                    page_latencies.append(page_elapsed)
+                proof_tried.append(page_url)
+                if not page:
+                    continue
+                page["proof_page"] = True
+                pages.append(page)
+                social.extend(page_social)
+                if page_shows_org(page, proof_org):
+                    break
+            value["proof_pages_tried"] = proof_tried
         value["pages"] = pages
         social.extend(structured_social_links(value["structured_organisations"], final_url, homepage_sha256))
         value["site_contact"] = _merge_contact(site_contact(final_url, soup, value["structured_organisations"], html_text=html,
@@ -750,7 +916,7 @@ def fetch_website(url: str | None, *, timeout: float = 15.0, max_bytes: int = 2_
         if not supplied_scheme and normalized.startswith("https://"):
             first_elapsed = int((time.monotonic() - started) * 1000)
             record, metrics = fetch_website("http://" + supplied_url, timeout=timeout, max_bytes=max_bytes, source_type=source_type,
-                                            probe=probe, probe_terms=probe_terms)
+                                            probe=probe, probe_terms=probe_terms, proof_org=proof_org)
             metrics["requests"] += 2
             metrics["latencies_ms"].insert(0, first_elapsed)
             return record, metrics

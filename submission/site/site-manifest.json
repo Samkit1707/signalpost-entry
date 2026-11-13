@@ -1,10 +1,10 @@
 {
-  "run_id": "v6-smoke-100",
-  "completed_at": "2026-11-13T19:21:26.875751Z",
+  "run_id": "smoke-100-coverage",
+  "completed_at": "2026-11-13T20:09:26.582287Z",
   "companies": 100,
   "company_pages": 100,
   "with_summary": 100,
-  "with_verified_website": 5,
+  "with_verified_website": 6,
   "with_dated_news": 2,
   "entry": "index.html",
   "compare": "compare.html"

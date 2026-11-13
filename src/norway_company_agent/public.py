@@ -154,8 +154,12 @@ def allowed_links(envelope: dict[str, Any]) -> dict[str, set[str]]:
     return {"hosts": hosts, "profiles": profiles, "emails": emails}
 
 
+# Norwegian abbreviations that look like domains: "(org.no. 913 365 798)" is "organisation number", not a link.
+NOT_LINKS = {"org.no", "org.nr", "orgnr.no", "foretaksnr.no"}
+
+
 def _url_allowed(url: str, allowed: dict[str, set[str]]) -> bool:
-    if url.casefold().startswith(("about:", "mailto:")):
+    if url.casefold().startswith(("about:", "mailto:")) or url.casefold() in NOT_LINKS:
         return True
     host = _host(url)
     if not host:

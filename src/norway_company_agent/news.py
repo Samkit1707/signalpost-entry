@@ -372,7 +372,7 @@ def unrepeated_mention(text: str, legal_words: list[str], brands: list[str], url
 
 def _default_fetch(url: str, *, timeout: float = 15.0, max_bytes: int = FEED_MAX_BYTES) -> dict[str, Any]:
     """One robots-checked GET through the per-host slot. Returns body, final URL, sha256 and request count."""
-    from .website import SAFE_OPENER, USER_AGENT, _robots_allowed, assert_public_url, robots_cached
+    from .website import USER_AGENT, _robots_allowed, assert_public_url, open_with_retry, robots_cached
 
     robots_requests = 0 if robots_cached(url) else 1
     try:
@@ -381,7 +381,7 @@ def _default_fetch(url: str, *, timeout: float = 15.0, max_bytes: int = FEED_MAX
             return {"error": "robots.txt disallows", "requests": robots_requests}
         request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT,
                                                        "Accept": "application/rss+xml,application/atom+xml,application/xml,text/xml,text/html;q=0.8"})
-        with host_slot(url) as started, SAFE_OPENER.open(request, timeout=timeout) as response:
+        with host_slot(url) as started, open_with_retry(request, timeout) as response:
             raw = response.read(max_bytes + 1)
             final_url = response.geturl()
             elapsed = int((time.monotonic() - started) * 1000)

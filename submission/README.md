@@ -10,6 +10,12 @@ candidates the v5 envelope still carried; v6 envelopes hold only verified links 
 | `audit-v6.html` | hand-check page for 100 companies never run before: every published website, social profile and news link with proof (25 links), v5-only links on the same companies (1), every rejected candidate (`scripts/build_audit_v6.py`). Checked by hand by the owner: 25/25 correct |
 | `tests.txt`, `fresh-clone-check.txt` | offline tests (214); clone → `uv sync --frozen` → tests → replay → live 5-company run |
 
+**Coverage update (org-number proof on terms/privacy pages, better domain candidates, retries).** The smoke files, `site/`,
+`tests.txt` and `fresh-clone-check.txt` above are now from this update: smoke 100/100, validation passed, 1,208 requests,
+p50 267 ms, p95 3,546 ms, 151 s, 3,796 published claims, 0 problems, 10 retries. `audit-coverage.html`: only the links
+the update adds on the same 100 unseen companies as `audit-v6.html` (websites 9 → 13, social profiles 12 → 17, news 4 → 13,
+careers 0 → 1, none lost), each website with the line that prints its org number; checked by hand by the owner: 19/19 correct.
+
 The v5 evidence below is kept for reference (its smoke files and site were replaced by v6's).
 
 ## v5 evidence (2 Nov)

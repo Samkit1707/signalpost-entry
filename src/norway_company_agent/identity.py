@@ -64,6 +64,8 @@ def number_quote(value: dict[str, Any], numbers: Any) -> dict[str, Any] | None:
                (value.get("final_url"), value.get("content_sha256"), value.get("main_text_excerpt"))]
     sources += [(page.get("url"), page.get("content_sha256"), page.get(key)) for page in value.get("pages") or []
                 for key in ("identity_text_excerpt", "main_text_excerpt")]
+    sources += [(page.get("url"), page.get("content_sha256"), " · ".join(page.get("org_number_lines") or []))
+                for page in [value, *(value.get("pages") or [])]]
     for url, sha, text in sources:
         text = " ".join(str(text or "").split())
         for number in numbers:
@@ -346,7 +348,7 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
     rendered = value.get("js_fallback") or {}
     homepage_identity_parts = [
         value.get("title"), value.get("description"), value.get("identity_text_excerpt"), hostname, *structured_names,
-        rendered.get("title"),
+        rendered.get("title"), *(value.get("org_number_lines") or []),
     ]
     candidate_parts = [
         *homepage_identity_parts, value.get("main_text_excerpt"),
@@ -411,7 +413,9 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
         for page in value.get("pages", []):
             # Only the page's own legal/footer block counts, and only when it names a single organisation
             # number: group pages listing several subsidiaries are related, not exact.
-            page_text = str(page.get("identity_text_excerpt") or "")
+            # Coverage: the lines of a contact/privacy/terms page that print a 9-digit number count too, under the
+            # same rule: this exact number and no other 9-digit number on that page.
+            page_text = " ".join([str(page.get("identity_text_excerpt") or ""), *[str(line) for line in page.get("org_number_lines") or []]])
             numbers = set(re.findall(r"(?<!\d)(\d{3})[\s.\u00a0-]?(\d{3})[\s.\u00a0-]?(\d{3})(?!\d)", page_text))
             if org_number_present(page_text, org_digits) and len(numbers) == 1:
                 score = 1.0
@@ -434,7 +438,8 @@ def assess_website_identity(profile: dict[str, Any]) -> dict[str, Any]:
     # v4 (stricter): the site's own identity blocks print organisation number(s), none of them this company's: it is
     # another entity's site (e.g. "Perfekt Hus og Hage AS, org.nr 925 353 191" for PERFEKT HAGE AS), never published.
     identity_numbers = set()
-    for text in [value.get("identity_text_excerpt"), *[page.get("identity_text_excerpt") for page in value.get("pages", [])]]:
+    for text in [value.get("identity_text_excerpt"), *[page.get("identity_text_excerpt") for page in value.get("pages", [])],
+                 *[line for page in [value, *value.get("pages", [])] for line in page.get("org_number_lines") or []]]:
         identity_numbers |= org_numbers_in(text)
     other_entity_site = None
     if identity_numbers and org_digits not in identity_numbers and not group_numbers:

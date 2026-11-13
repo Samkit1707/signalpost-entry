@@ -29,7 +29,7 @@ from norway_company_agent.evidence import utc_now  # noqa: E402
 from norway_company_agent.identity import apply_website_identity_gate  # noqa: E402
 from norway_company_agent.official import fetch_official_modules  # noqa: E402
 from norway_company_agent.registry_bulk import BulkUnavailable, ensure_bulk  # noqa: E402
-from norway_company_agent.website import fetch_website, normalize_homepage  # noqa: E402
+from norway_company_agent.website import RETRY_STATS, fetch_website, normalize_homepage  # noqa: E402
 from norway_company_agent.confidence import link_report  # noqa: E402
 from norway_company_agent.public import diagnostics_record  # noqa: E402
 from norway_company_agent import wikidata as wikidata_source  # noqa: E402
@@ -194,7 +194,7 @@ def main() -> None:
                     candidate = wikidata_website_candidate(wiki)
                     if candidate:
                         url, source_type = candidate, "wikidata_linked_company_website"
-                website_record, website_metrics = fetch_website(url, source_type=source_type)
+                website_record, website_metrics = fetch_website(url, source_type=source_type, proof_org=org)
                 profile["evidence"]["website"] = apply_website_identity_gate(profile, website_record)["website"]
                 apply_wikidata_identity_support(profile, wiki)
                 current = profile["evidence"]["website"]
@@ -204,7 +204,7 @@ def main() -> None:
                 if not published and wiki_url and source_type != "wikidata_linked_company_website" \
                         and (urlparse(wiki_url).hostname or "").removeprefix("www.") != (urlparse(normalize_homepage(url) or "").hostname or "").removeprefix("www."):
                     # v5: the registry website failed or was not proven; the exact Wikidata item's P856 is the next candidate
-                    wiki_record, wiki_metrics = fetch_website(wiki_url, source_type="wikidata_linked_company_website")
+                    wiki_record, wiki_metrics = fetch_website(wiki_url, source_type="wikidata_linked_company_website", proof_org=org)
                     for key in ("requests", "bytes"):
                         website_metrics[key] += wiki_metrics[key]
                     website_metrics["latencies_ms"] = website_metrics["latencies_ms"] + wiki_metrics["latencies_ms"]
@@ -330,6 +330,8 @@ def main() -> None:
         },
         "validation": validation,
         "links": link_report(envelopes),
+        "retries": {"website_pages_retried_once": RETRY_STATS["retries"],
+                    "rule": "one retry on HTTP 429/503 (Retry-After <= 10 s) or a timeout"},
         "link_guard": {"removed_from_envelopes": len(guard_log), "examples": guard_log[:20],
                        "diagnostics_file": str(diagnostics_path)},
     }

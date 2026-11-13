@@ -110,12 +110,15 @@ def bare(name: str, email: str = "", **extra) -> dict:
 def test_candidate_order_email_then_no_then_com_and_generic_email_skipped():
     assert registry_email_domain(bare("Fjord Bakeri AS", "post@gmail.com")) is None
     assert registry_email_domain(bare("Fjord Bakeri AS", "Post@Fjordbakst.NO")) == "fjordbakst.no"
-    assert name_labels("Nordlys Fjord Bakeri AS") == ["nordlysfjordbakeri", "nordlys-fjord-bakeri", "nordlysfjord", "nordlys"]
+    assert name_labels("Nordlys Fjord Bakeri AS") == ["nordlysfjordbakeri", "nordlys-fjord-bakeri", "nordlysfjord", "nordlys-fjord", "nordlys"]
+    assert name_labels("Bølgen Kaffebrenneri AS") == ["bolgenkaffebrenneri", "bolgen-kaffebrenneri", "boelgenkaffebrenneri",
+                                                      "boelgen-kaffebrenneri", "bolgen"]
     assert name_labels("Fjord Holding AS") == []
     order = [(c["domain"], c["method"]) for c in website_candidates(bare("Fjord Bakeri AS", "post@fjordbakst.no", _subunit=True),
                                                                      tried={"fjordbakeri.no"})]
     assert order == [("fjordbakst.no", "registry_email_domain"), ("fjord-bakeri.no", "name_variant"), ("fjord.no", "name_variant"),
-                     ("fjordbakerietsandnes.no", "subunit_name"), ("fjordbakeri.com", "name_variant"), ("fjord-bakeri.com", "name_variant")]
+                     ("fjordbakerietsandnes.no", "subunit_name"), ("fjordbakeriet-sandnes.no", "subunit_name"),
+                     ("fjordbakeri.com", "name_variant"), ("fjord-bakeri.com", "name_variant"), ("fjordbakerietsandnes.com", "subunit_name")]
 
 
 def site_record(url: str, footer: str = "", pages: list | None = None, title: str = "Velkommen", text: str = FILLER) -> dict:

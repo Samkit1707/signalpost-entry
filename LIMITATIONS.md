@@ -27,3 +27,5 @@
 - v6: a site with foreign-country signals (US address/phone, non-Norwegian JSON-LD country) is not published without the
   org number, even when it is the registry's own entry. Job ads from careers pages carry no date unless the page
   embeds a JobPosting date. Quotes in evidence may show "[unverified link withheld]" where a page named another domain.
+- Org-number proof pages: at most 6 pages per site; a number printed only in an image or a PDF is not seen. A page that
+  prints another 9-digit number next to ours (a data processor's org number, for example) does not count as proof.

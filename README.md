@@ -370,3 +370,24 @@ filed. The registry identity follows. `synthesis.headline` holds it.
 
 Hand-check page for 100 never-run companies: `submission/audit-v6.html` (`scripts/build_audit_v6.py`), 25/25 links
 checked correct by the owner.
+
+### Coverage: org-number proof on terms/privacy pages, better domain candidates, retries
+
+More verified websites with the identity rules unchanged (a domain that is not the registry's own entry still needs the
+exact organisation number printed on it).
+
+- **Proof pages** (`website.fetch_website(proof_org=...)`): when the homepage does not print the org number, up to 6 pages
+  per site (homepage included) are checked: links whose path or text names contact, about, privacy, terms or imprint
+  pages, then `sitemap.xml`, then `/kontakt`, `/om-oss`, `/personvern`, `/privacy`, `/vilkar`, `/kjopsvilkar`,
+  `/salgsbetingelser`, `/impressum`. It stops at the first page that prints the number. Each page keeps the text lines
+  that carry a 9-digit number (`org_number_lines`); a page proves identity only with this exact number and no other
+  9-digit number on it. The quoted proof is that line.
+- **Candidates** (`domain_guess.py`): ø/å/æ as o/a/ae and as oe/aa/ae, joined and hyphenated, first two words, sub-unit
+  names; `.no` first, then full names on `.com`. DNS pre-check; at most 8 candidate sites fetched per company.
+- **Retries**: one retry on HTTP 429/503 (Retry-After honoured up to 10 s) or a timeout, for site pages and Brønnøysund.
+  The run report counts them under `retries`.
+
+Same 100 unseen companies as `submission/audit-v6.html`, same day: websites 9 → 13, social profiles 12 → 17, news
+items 4 → 13, careers/jobs 0 → 1, no link lost; 914 → 1,248 requests, p95 3.9 → 4.0 s. Hand-check page with only the
+new links and their org-number lines: `submission/audit-coverage.html` (`scripts/build_audit_coverage.py`), 19/19
+checked correct by the owner.
