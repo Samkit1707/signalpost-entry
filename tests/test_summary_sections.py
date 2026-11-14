@@ -1,4 +1,4 @@
-"""Offline tests for the sectioned summary (buyer fact, what it does, what changed, unknowns, signals) and the site UX."""
+"""Offline tests for the five-section summary and the site UX (sections, sorting, filters, static compare)."""
 from __future__ import annotations
 
 import json
@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from test_v2_product import account, envelope, make_profile  # noqa: E402
 from norway_company_agent.site import APP_JS, build_site, company_facts, search_key  # noqa: E402
-from norway_company_agent.synthesis import change_phrase, website_unknown_reason  # noqa: E402
+from norway_company_agent.synthesis import change_phrase, website_unknown_reason, why_it_matters  # noqa: E402
 
 
 def topic(env: dict, name: str) -> list[dict]:
@@ -29,65 +29,68 @@ def rich() -> dict:
                                  website=True, news=[("Ny avtale signert", "2026-09-01"), ("Nytt kontor", "2026-06-12")]))
 
 
-def test_every_sentence_is_cited_and_the_buyer_fact_comes_first():
+def test_every_sentence_is_cited_in_one_of_five_sections_and_the_buyer_fact_comes_first():
     env = rich()
     ids = {item["id"] for item in env["evidence"]}
     sentences = env["synthesis"]["sentences"]
-    assert sentences[0]["topic"] == "headline"
-    assert sentences[0]["text"] == "Revenue NOK 1.2m in FY2025, up 25% from FY2024; annual result NOK 80k (Brønnøysund accounts)."
+    assert sentences[0]["topic"] == "headline" and sentences[0]["section"] == "brief"
+    assert sentences[0]["text"] == "Revenue NOK 1.2m in FY2025, up 25% from FY2024 (Brønnøysund accounts)."
     assert all(item["evidence_ids"] and set(item["evidence_ids"]) <= ids for item in sentences)
-    assert {"headline", "what_it_does", "changes", "signal", "unknown"} <= {item["topic"] for item in sentences}
+    order = [item["section"] for item in sentences]
+    assert order == sorted(order, key=["brief", "financials", "people", "work", "activity"].index)
+    assert len(topic(env, "why_it_matters")) == 1
 
 
-def test_what_it_does_is_one_register_sentence_plus_the_quoted_site_description():
-    what = topic(rich(), "what_it_does")
-    assert len(what) == 2
-    assert what[0]["text"].startswith("Testfirma 11 AS (org. no. 900 000 011) is a private limited company (AS) in Oslo")
-    assert "(NACE 62.010 Programmeringstjenester)" in what[0]["text"]
-    assert what[1]["text"] == "Its verified website (testfirma11.no) describes it: “Vi lager programvare for norske bedrifter”."
+def test_every_figure_appears_once_with_operating_margin_and_equity_ratio():
+    env = rich()
+    text = " ".join(item["text"] for item in env["synthesis"]["sentences"])
+    amounts = re.findall(r"NOK -?[\d.,]+(?:m|k|bn)?", text)
+    assert len(amounts) == len(set(amounts)), amounts
+    financials = topic(env, "financials")[0]["text"]
+    assert financials.startswith("FY2025 (company accounts): operating result NOK 10 (operating margin under 0.1%), annual result NOK 80,000")
+    assert "equity ratio" in financials and "revenue" not in financials  # revenue is the buyer fact
+    assert "%" not in topic(env, "why_it_matters")[0]["text"] and "NOK" not in topic(env, "why_it_matters")[0]["text"]
+    assert all("NOK" not in item["text"] for item in topic(env, "signal"))
 
 
-def test_what_changed_states_direction_and_percent_with_each_years_figure_cited():
+def test_what_changed_names_direction_and_only_the_earlier_years_amount():
     env = rich()
     changes = {item["text"].split(":")[0]: item for item in topic(env, "changes")}
-    assert changes["Revenue FY2024 → FY2025"]["text"] == "Revenue FY2024 → FY2025: up 25% (NOK 1.0m → NOK 1.2m)."
-    assert "up 60%" in changes["Annual result FY2024 → FY2025"]["text"]
-    assert "Equity FY2024 → FY2025" in changes
-    revenue_ids = changes["Revenue FY2024 → FY2025"]["evidence_ids"]
-    assert len(revenue_ids) == 2 and all(i.startswith("ev-financials-") for i in revenue_ids)  # one per filed year
-    news = next(item["text"] for item in topic(env, "changes") if item["text"].startswith("News"))
+    assert "Revenue FY2024 → FY2025" not in changes  # already stated in the buyer fact
+    assert changes["Annual result FY2024 → FY2025"]["text"] == "Annual result FY2024 → FY2025: up 60% (was NOK 50k)."
+    ids = changes["Annual result FY2024 → FY2025"]["evidence_ids"]
+    assert len(ids) == 2 and all(i.startswith("ev-financials-") for i in ids)  # one per filed year
+    news = next(item["text"] for item in topic(env, "news"))
     assert "“Ny avtale signert” (2026-09-01); “Nytt kontor” (2026-06-12)" in news
-    assert any(item["text"].startswith("Register status: active") for item in topic(env, "changes"))
 
 
 def test_change_phrases_name_sign_flips_and_never_divide_by_zero():
-    assert change_phrase("annual_result", -2_900_000, 10_100_000, "NOK") == "turned from a loss to a profit (NOK -2.9m → NOK 10.1m)"
-    assert change_phrase("equity", 100_000, -50_000, "NOK") == "turned negative (NOK 100k → NOK -50k)"
-    assert change_phrase("revenue", 0, 5_000, "NOK").startswith("up from zero")
-    assert change_phrase("revenue", 2_024_000, 2_025_000, "NOK") == "up less than 1% (NOK 2,024,000 → NOK 2,025,000)"
-    assert change_phrase("annual_result", 8, 8, "NOK") == "unchanged at NOK 8"
+    assert change_phrase("annual_result", -2_900_000, 10_100_000, "NOK") == "turned from a loss to a profit (was NOK -2.9m)"
+    assert change_phrase("equity", 100_000, -50_000, "NOK") == "turned negative (was NOK 100k)"
+    assert change_phrase("revenue", 0, 5_000, "NOK") == "up from zero"
+    assert change_phrase("revenue", 2_024_000, 2_025_000, "NOK") == "up less than 1% (was NOK 2,024,000)"
+    assert change_phrase("annual_result", 8, 8, "NOK") == "unchanged"
 
 
-def test_signals_are_labelled_numeric_observations_at_most_three():
-    env = rich()
-    signals = env["synthesis"]["signals"]
-    labels = [item["label"] for item in signals]
-    assert 2 <= len(signals) <= 3
-    assert labels[:3] == ["Negative equity in FY2025", "Profitable two years running", "Revenue up 25% in FY2025"]
+def test_signals_are_labelled_observations_without_amounts_at_most_three():
+    signals = rich()["synthesis"]["signals"]
+    assert [item["label"] for item in signals] == ["Negative equity in FY2025", "Profitable two years running", "2 dated news items"]
     for item in signals:
         assert re.search(r"\d", item["text"]) and item["evidence_ids"]
         assert not re.search(r"\b(will|expect|likely|strong|weak|healthy|impressive)\b", item["text"], re.I)
 
 
-def test_unknowns_list_each_missing_family_with_a_reason():
+def test_one_short_unknown_line_per_missing_family_in_its_section():
     env = envelope(make_profile(12, records=[account(2025)]))
-    unknown = {item.get("family"): item["text"] for item in topic(env, "unknown")}
-    assert unknown["website"] == "No verified website: the registry lists none."
-    assert unknown["news"] == "No dated news: there is no verified website to read it from."
-    assert unknown["jobs"].startswith("No job postings:") and unknown["profiles"].startswith("No social profiles:")
-    assert unknown["employees"] == "No employee count: the register holds none for this entity."
-    assert "Only one filed year (FY2025)" in unknown["financial_trend"]
-    assert unknown["registry_history"].startswith("Registry changes: this run reads the current register only")
+    unknown = [(item.get("family"), item["section"], item["text"]) for item in topic(env, "unknown")]
+    families = [family for family, _, _ in unknown]
+    assert len(families) == len(set(families))
+    by = {family: (section, text) for family, section, text in unknown}
+    assert by["website"] == ("brief", "Website: no verified site — the registry lists none.")
+    assert by["news"] == ("activity", "News: no dated item — no verified website to read it from.")
+    assert by["employees"] == ("work", "Employees: not registered.")
+    assert by["financial_trend"][0] == "financials" and "only filed year" in by["financial_trend"][1]
+    assert all(len(text) < 140 for _, _, text in unknown)
 
 
 def test_website_reason_counts_candidates_read_without_naming_them():
@@ -95,11 +98,21 @@ def test_website_reason_counts_candidates_read_without_naming_them():
     profile = {"website": None, "website_discovery": {"candidates": [
         {"candidate": "wrongco.no", "result": "available"}, {"candidate": "x.no", "result": "no_dns"}, {"candidate": "y.no", "result": "available"}]}}
     reason = website_unknown_reason(profile, claim)
-    assert reason == ("No verified website: the registry lists none, and none of the 2 candidate domains read "
-                      "(from the name or registry e-mail) printed the org number.")
+    assert reason == "Website: no verified site — the registry lists none, and none of 2 candidate domains read printed the org number."
     assert "wrongco" not in reason
     assert "did not prove" in website_unknown_reason({"website": "https://a.no"}, claim)
     assert "robots.txt" in website_unknown_reason({}, {"availability": "blocked"})
+    ambiguous = website_unknown_reason({"website": "https://k.no", "registry_website_ambiguous": {"reason": "k.no is filed by 3 companies"}}, claim)
+    assert "filed by 3 companies" in ambiguous
+
+
+def test_why_it_matters_names_no_amount_and_keeps_its_plain_meaning():
+    def year(fy, revenue, result, equity=None):
+        return {"period": {"tilDato": f"{fy}-12-31"}, "revenue": revenue, "annual_result": result, "equity": equity, "currency": "NOK"}
+    text = why_it_matters(year(2025, 17_368_185.0, 0.0), year(2024, 17_980_000.0, 0.0))
+    assert "the annual result was unchanged" in text and "the change in revenue did not move the result" in text and "NOK" not in text
+    flip = why_it_matters(year(2025, 900, -50, -10), year(2024, 1000, 80))
+    assert "loss-making after a profitable year" in flip and "equity was negative" in flip and "NOK" not in flip
 
 
 def test_missing_figures_are_never_zero_in_the_summary():
@@ -107,14 +120,13 @@ def test_missing_figures_are_never_zero_in_the_summary():
                                              account(2025, revenue=None, annual_result=None, equity=None)]))
     text = env["synthesis"]["narrative"]
     assert "NOK 0" not in text and "not reported" in text
-    assert not topic(env, "signal") or all("revenue" not in item["text"].lower() for item in topic(env, "signal"))
 
 
 def test_compare_facts_say_not_available_with_the_reason():
     facts = {fact["key"]: fact for fact in company_facts(envelope(make_profile(14, records=[account(2025)])))}
-    assert facts["website"]["text"] == "Not available" and facts["website"]["reason"] == "The registry lists none."
-    assert facts["news"]["reason"] == "There is no verified website to read it from."
-    assert facts["employees"]["reason"] == "The register holds none for this entity."
+    assert facts["website"]["text"] == "Not available" and facts["website"]["reason"] == "No verified site — the registry lists none."
+    assert facts["news"]["reason"] == "No dated item — no verified website to read it from."
+    assert facts["employees"]["reason"] == "Not registered."
     assert "reason" not in facts["revenue"]
 
 
@@ -135,50 +147,52 @@ def test_browser_fold_matches_the_python_search_key():
     assert all(query in key for query in out)
 
 
-def test_company_page_has_sticky_header_summary_block_and_one_tap_sources(tmp_path):
-    envs = [rich(), envelope(make_profile(15, records=None))]
+def build(tmp_path, envs):
     build_site(envs, tmp_path / "site", {"run_id": "t", "completed_at": "2026-11-14T00:00:00Z"})
-    page = (tmp_path / "site" / "companies" / f"{envs[0]['organisation_number']}.html").read_text()
-    assert '<div class="sticky">' in page and "Org. no. 900 000 011" in page.split('<div class="sticky">')[1][:400]
-    block = page.split('<h2 id="summary">Summary · What changed · Unknowns</h2>')[1].split('<h2 id="facts">')[0]
-    for heading in ("Buyer fact", "What it does", "Signals", "What changed", "What’s unknown"):
-        assert f"<h3>{heading}</h3>" in block
-    items = re.findall(r"<(?:li|p class=\"lead\")>(.*?)</(?:li|p)>", block)
-    assert items and all('target="_blank"' in item and "↗" in item for item in items)  # each sentence: a source link, one tap
-    assert 'class="skip" href="#main"' in page and '<main id=main class="wrap">' in page
-    assert page.count("<h1>") == 1 and "<title>" in page
-    assert all(' alt="' in tag for tag in re.findall(r"<img[^>]*>", page))
-    index = (tmp_path / "site" / "index.html").read_text()
-    assert 'id="has-jobs"' in index and 'data-jobs="0"' in index and "<p class=lead>Revenue NOK 1.2m" in index
-    data = (tmp_path / "site" / "data" / f"{envs[1]['organisation_number']}.js").read_text()
-    payload = json.loads(data[data.index(",{") + 1:data.rindex(");")])
-    website = next(fact for fact in payload["facts"] if fact["key"] == "website")
-    assert website["text"] == "Not available" and website["reason"] == "The registry lists none."
+    return tmp_path / "site"
 
 
-def test_why_it_matters_is_one_cited_line_from_the_two_filed_years_shown_after_the_buyer_fact(tmp_path):
-    env = rich()
-    why = topic(env, "why_it_matters")
-    assert len(why) == 1 and env["synthesis"]["why_it_matters"] == why[0]["text"]
-    assert why[0]["text"].startswith("Why it matters (FY2024 → FY2025): ")
-    assert "FY2023" not in why[0]["text"] and not re.search(r"\b(will|expect|likely)\b", why[0]["text"])
-    figure_ids = {item["evidence_ids"][0] for item in env["claims"] if item.get("fact_level") and item["field"] in
-                  {"annual_revenue", "annual_result", "equity"} and item["value"]["fiscal_year"] in (2024, 2025)}
-    assert figure_ids <= set(why[0]["evidence_ids"])
-    build_site([env], tmp_path / "site", {"run_id": "t"})
-    page = (tmp_path / "site" / "companies" / f"{env['organisation_number']}.html").read_text()
-    block = page.split('<h2 id="summary">')[1]
+def test_every_company_page_has_the_same_five_sections_and_a_check_link_per_fact(tmp_path):
+    envs = [rich(), envelope(make_profile(15, records=None))]
+    site = build(tmp_path, envs)
+    for env in envs:
+        page = (site / "companies" / f"{env['organisation_number']}.html").read_text()
+        headings = re.findall(r'<section class="sec" aria-labelledby="(\w+)"><h2 id="\1">([^<]+)</h2>', page)
+        assert [title for _, title in headings] == ["Company brief", "Latest financials", "Who runs it", "Working here", "Recent activity"]
+        assert '<div class="sticky">' in page and "Org. no. " in page.split('<div class="sticky">')[1][:400]
+        for row in re.findall(r"<tr><td>[^<]+</td><td[^>]*>.*?</td><td>(.*?)</td></tr>", page.split('<h2 id="evidence">')[0]):
+            assert row.count("Check the evidence ↗") <= 1
+        assert re.search(r'<details><summary>Evidence list \(\d+ records', page)  # the long evidence list is collapsed
+        assert 'class="skip" href="#main"' in page and '<main id=main class="wrap">' in page and page.count("<h1>") == 1
+    page = (site / "companies" / f"{envs[0]['organisation_number']}.html").read_text()
+    block = page.split('<h2 id="brief">')[1]
     assert block.index("<h3>Buyer fact</h3>") < block.index("<h3>Why it matters</h3>") < block.index("<h3>What it does</h3>")
-    single = envelope(make_profile(16, records=[account(2025)]))
-    assert "only filed year" in single["synthesis"]["why_it_matters"]
+    lines = re.findall(r'<(?:li|p class="lead")>(.*?)</(?:li|p)>', page.split('<h2 id="evidence">')[0])
+    assert lines and all("Check the evidence ↗" in item for item in lines if "[ev-" in item)
 
 
-def test_unchanged_result_reads_plainly_and_signals_do_not_interpret():
-    from norway_company_agent.synthesis import why_it_matters
-    text = why_it_matters({"period": {"tilDato": "2025-12-31"}, "revenue": 17_368_185.0, "annual_result": 0.0},
-                          {"period": {"tilDato": "2024-12-31"}, "revenue": 17_980_000.0, "annual_result": 0.0})
-    assert "the annual result was unchanged at NOK 0" in text and "broke even" not in text and "NOK 0 → NOK 0" not in text
-    env = envelope(make_profile(17, records=[account(2025, revenue=0.0, annual_result=-6500.0, operating_result=-6500.0)]))
-    labels = {item["label"]: item["text"] for item in env["synthesis"]["signals"]}
-    assert labels["No operating revenue in FY2025"].endswith("while a result was reported.")
-    assert "holding" not in env["synthesis"]["narrative"]
+def test_index_sorts_filters_and_shows_key_figures_without_js(tmp_path):
+    envs = [envelope(make_profile(15, records=None)), rich(), envelope(make_profile(16, records=[account(2025)]))]
+    index = (build(tmp_path, envs) / "index.html").read_text()
+    for control in ('id="sort"', ">Most data found<", ">Name A–Z<", ">Revenue (highest first)<", 'id="place"', 'id="industry"', 'id="area"'):
+        assert control in index
+    order = re.findall(r'<li class="row" data-org="(\d+)"', index)
+    assert order[0] == envs[1]["organisation_number"] and order[-1] == envs[0]["organisation_number"]  # most data found first
+    assert "<b>Revenue</b> NOK 1,250,000 (FY2025)" in index and "<b>Place</b> Oslo" in index and "<b>Industry</b> 62.010" in index
+    assert 'data-areas="website profiles news' in index or 'data-areas="website news' in index
+    stats = index.split('<div class="stats">')[1].split("</div></div>")[0]
+    assert "with verified website" in stats and "with register changes" in stats and "with sub-unit websites" in stats
+
+
+def test_compare_page_is_pre_rendered_and_reads_without_js(tmp_path):
+    envs = [rich(), envelope(make_profile(16, records=[account(2025)]))]
+    compare = (build(tmp_path, envs) / "compare.html").read_text()
+    table = compare.split('<table class="static">')[1]
+    assert table.count("<tr><td><a href=\"companies/") == 2 and "NOK 1,250,000" in table and 'class="check"' in table
+    assert "Not available" in table and "<noscript>" not in compare
+    assert '<div id="pickers" hidden>' in compare  # the side-by-side picker is a JS enhancement
+
+
+def test_link_targets_are_at_least_44px_on_desktop_too():
+    from norway_company_agent.site import CSS
+    assert re.search(r"(^|\n)a\{display:inline-flex;align-items:center;min-height:44px\}", CSS)

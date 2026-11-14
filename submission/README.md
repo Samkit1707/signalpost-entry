@@ -8,7 +8,7 @@ candidates the v5 envelope still carried; v6 envelopes hold only verified links 
 | `smoke-report.json`, `smoke-envelopes.jsonl`, `smoke-run.log` | 100-company smoke on v6: 100/100 envelopes, validation passed, 895 requests, p50 255 ms, p95 3,428 ms, 128 s. 3,795 published claims; 0 citation, state or site-ownership problems. Every link in the envelopes is a published claim, Brønnøysund/Wikidata, or a page on the company's verified site |
 | `site/` | the static site the v6 smoke run wrote; the summary opens with a sourced key fact |
 | `audit-v6.html` | hand-check page for 100 companies never run before: every published website, social profile and news link with proof (25 links), v5-only links on the same companies (1), every rejected candidate (`scripts/build_audit_v6.py`). Checked by hand by the owner: 25/25 correct |
-| `tests.txt`, `fresh-clone-check.txt` | offline tests (214); clone → `uv sync --frozen` → tests → replay → live 5-company run |
+| `tests.txt`, `fresh-clone-check.txt` | offline tests (263 now); clone → `uv sync --frozen` → tests → replay → live 5-company run |
 
 **Coverage update (org-number proof on terms/privacy pages, better domain candidates, retries).** The smoke files, `site/`,
 `tests.txt` and `fresh-clone-check.txt` above are now from this update: smoke 100/100, validation passed, 1,208 requests,
@@ -37,6 +37,24 @@ desktop width and at 390 px; `screenshots/audit.json` is the headless-Chrome che
 target under 44 px at 390 px, one h1 and a title per page, search finds "930 856 916", "fjellglod", "fjellgloed" and
 "FJELLGLØD", and company pages and all 100 index rows read with JavaScript off. The registry bulk download now always has
 a time limit and falls back to an older cached snapshot, then the live registry (offline tests in `tests/test_registry_bulk.py`).
+
+**Registry changes, registry-listed and sub-unit websites, run stages (15 Nov).** The smoke files, `site/`, `tests.txt`
+and `fresh-clone-check.txt` above are now from this update: smoke 100/100, validation passed, 1,323 requests, p95
+3,753 ms, 176 s, 4,227 published claims, 0 citation, state or site-ownership problems. New on the smoke batch against
+the run before (`audit-final.html`): 332 dated registry change events on 100 companies (main-unit feed only, stated
+changes only) and one link, NOVOOI AS's Instagram (`instagram.com/novooi.no`, a handle the link guard used to read as
+a domain); no link the run before published is lost. A registry website that cannot be read is published from the
+registry record only when its domain resolves in DNS and no other company files it; a sub-unit website only when its
+site resolves, stays on its domain and prints the sub-unit's or parent's org number or exact legal name (none on the
+smoke batch). Identity text no longer reads `<script>`, `<style>` or `<template>` content: on a 1,100 run one website
+had been proven only by an org number inside a tracking script's URL, and it is no longer published.
+`registry-events-sample.txt`: 10 random published events, each next to the feed entry it cites (re-fetched; same org
+number and instant, 10/10). `run-1100-report.json`: 1,100 companies with a cold start, 1,100/1,100 envelopes,
+validation passed, 12,962 requests, p95 3,395 ms, 27 min 7 s; the bulk download was cut off by the network and hit its
+time limit, so the run took identity basics from the live registry, and the change feed was skipped for all 1,100
+companies (it starts only after every company's core registry work, and not past half of `--deadline-minutes`).
+`run-1100-report-download.json`: the same 1,100 the hour before (code before the script-text and label fixes), with
+the bulk download completing in 8 min: 1,100/1,100, validation passed, 27 min 20 s, change feed also skipped for all.
 
 The v5 evidence below is kept for reference (its smoke files and site were replaced by v6's).
 

@@ -12,9 +12,13 @@
   Atom entries with only `<updated>` and sitemap `<lastmod>` are not treated as publication dates.
 - The synthesis is template-based from the envelope's own claims. It states no trend without two filed years of the
   same account type that both report the figure, and it does not interpret beyond the sources.
-- The compare view needs JavaScript; company pages and the index list are plain HTML.
-- The official run reads the current register only (no earlier snapshot), so registry changes over time (roles,
-  address, status) are listed as unknown; the register's employee count is one value, so no headcount change is stated.
+- The compare page is pre-rendered (every company's key facts) and reads without JavaScript; picking 2–3 companies for
+  the side-by-side view needs JavaScript.
+- Registry changes come from the Brønnøysund update feeds, which give each changed field's new value only: the old value
+  is stated only when an earlier event in the same feed set that field. Only the main unit's feed is read (no role or
+  sub-unit feeds), and only updates that state a change are published. Past website and e-mail values are not
+  published. The feed is fetched last and skipped once half of the run deadline has passed, so a slow run can have no
+  change events for some companies (stated on the claim).
 - v6: every website not listed in the registry (e-mail domain, Wikidata P856, name variants) publishes only on the
   printed organisation number; many real sites that show only the name stay unpublished by design. Registry e-mail domains are often an accountant's
   or property manager's and are rejected by the same rule.
@@ -35,4 +39,13 @@
   root-level slugs with only a generic JSON-LD Article are not counted. Articles without a machine-readable publication date
   (only a date in the visible text) are not counted.
 - Recruiting systems that render their ad list with JavaScript only (no links in the HTML) yield no job postings.
-- A sub-unit's registry website that is not the company's verified website is not published or labelled.
+- A sub-unit's registry website is published as that sub-unit's site (`related_website`), never as the company's own,
+  and only when its domain is filed as the website of no other main unit in the bulk entity file, is not a known
+  platform or chain domain, resolves, does not redirect elsewhere, and prints the sub-unit's or parent's org number or
+  exact legal name. The filer count covers main units (the bulk entity file), not other sub-units. A sub-unit site that
+  shows its owner only in images or scripts is not published.
+- A registry website that could not be read at crawl time is published from the registry record alone (marked
+  "site unreachable at crawl time", medium confidence) when its domain is this company's alone and still resolves in
+  DNS. A domain that resolves may still have changed hands since it was registered; nothing from the site is used.
+- A company that passes the per-company time limit in a phase keeps its row, with that phase's unfinished modules
+  `failed`; a slow host can therefore cost that company its website or news for the run.

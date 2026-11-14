@@ -1,0 +1,314 @@
+{
+  "run_id": "rehearsal-1100",
+  "started_at": "2026-11-14T20:17:01.439105Z",
+  "completed_at": "2026-11-14T20:43:41.471047Z",
+  "expected_count": 1100,
+  "emitted_envelopes": 1100,
+  "resumed_profiles": 0,
+  "phases": {
+    "registry": {
+      "companies": 1100,
+      "timed_out": [
+        "959331162"
+      ],
+      "finished_at_s": 932.5
+    },
+    "enrichment": {
+      "companies": 1100,
+      "timed_out": [],
+      "finished_at_s": 983.4
+    },
+    "events": {
+      "companies": 1100,
+      "timed_out": [],
+      "finished_at_s": 983.7,
+      "skipped_for_deadline": 1100,
+      "skip_after_minutes": 20.0
+    },
+    "company_timeout_seconds": 240.0,
+    "rule": "registry work for every company is queued first in its own pool; each company's enrichment starts when its registry work is done; the change feed runs last, only after all registry work, and is skipped past half the deadline; a company past the limit keeps its row with failed modules"
+  },
+  "profiles_fetched_this_run": 1100,
+  "modules": [
+    "registry",
+    "accounting_obligation",
+    "registry_live",
+    "financials",
+    "roles",
+    "group",
+    "locations",
+    "registry_events",
+    "wikidata_footprint",
+    "website",
+    "workforce",
+    "external_profiles",
+    "company_activity",
+    "company_jobs",
+    "dated_news"
+  ],
+  "registry": {
+    "registry_snapshot_sha256": null,
+    "registry_rows_scanned": 0,
+    "requested": 1100,
+    "selected": 0,
+    "absent_from_snapshot": [],
+    "snapshot_unavailable": true
+  },
+  "registry_download": {
+    "source": "unavailable",
+    "error": "Could not download the Brønnøysund bulk registry from https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv: ['OSError: bulk download truncated: 84399628 of 155321921 bytes', 'TimeoutError: bulk download exceeded its time budget after 41943040 bytes', 'time budget exhausted before this attempt']",
+    "requests": 2
+  },
+  "operations": {
+    "requests": 12962,
+    "bytes": 473758288,
+    "p50_ms": 270,
+    "p95_ms": 3395,
+    "requests_per_company": 11.78,
+    "projected_requests_for_1000": 11780,
+    "runtime_ms": 1627431
+  },
+  "budget": {
+    "max_requests": null,
+    "deadline_minutes": 40.0,
+    "stopped_early": false
+  },
+  "wikidata": {
+    "enabled": true,
+    "status": "ok",
+    "indexed_organisations": 16,
+    "requests": 6,
+    "cached": false,
+    "retrieved_at": "2026-11-14T20:27:17.525574Z",
+    "content_sha256": "095015fe2fd672334c4f195793f4f7a29784192e54e163a2c9feb339dc901ad3"
+  },
+  "coverage": {
+    "registry": 0,
+    "accounting_obligation": 0,
+    "registry_live": 1099,
+    "financials": 1097,
+    "roles": 1096,
+    "group": 76,
+    "locations": 847,
+    "registry_events": 0,
+    "wikidata_footprint": 15,
+    "website": 164,
+    "workforce": 179,
+    "external_profiles": 56,
+    "company_activity": 0,
+    "company_jobs": 9,
+    "dated_news": 10
+  },
+  "validation": {
+    "passed": true,
+    "checks": {
+      "exact_expected_count": true,
+      "unique_organisation_numbers": true,
+      "all_entity_states_terminal": true,
+      "all_module_states_terminal": true,
+      "zero_silent_drops": true
+    },
+    "invalid_states": [],
+    "citations": {
+      "published_claims": 41934,
+      "claims_outside_the_six_contract_states": 0,
+      "published_claims_missing_hash": 0,
+      "published_claims_missing_span": 0,
+      "citation_problems": 0,
+      "state_problems": 0,
+      "site_ownership_problems": 0,
+      "examples": {},
+      "passed": true,
+      "withheld_by_check": [],
+      "uncited_withheld": [
+        {
+          "organisation_number": "977142946",
+          "field": "official_website",
+          "module": "website",
+          "reason": "no exact span"
+        }
+      ]
+    }
+  },
+  "links": {
+    "published": {
+      "jobs": {
+        "high": 13,
+        "medium": 0,
+        "none": 0,
+        "companies": 9
+      },
+      "news": {
+        "high": 11,
+        "medium": 28,
+        "none": 0,
+        "companies": 10
+      },
+      "social": {
+        "high": 98,
+        "medium": 6,
+        "none": 0,
+        "companies": 56
+      },
+      "website": {
+        "high": 105,
+        "medium": 0,
+        "none": 0,
+        "companies": 105
+      }
+    },
+    "social_profiles": {
+      "companies": 53,
+      "profiles": 93,
+      "high": 87,
+      "medium": 6
+    },
+    "websites_by_method": {
+      "name_variant": 36,
+      "registry_email_domain": 8,
+      "registry_hjemmeside": 56,
+      "subunit_name": 1,
+      "subunit_registry_website": 2,
+      "wikidata_p856": 2
+    },
+    "candidates_not_published": {}
+  },
+  "retries": {
+    "website_pages_retried_once": 142,
+    "rule": "one retry on HTTP 429/503 (Retry-After <= 10 s) or a timeout"
+  },
+  "link_guard": {
+    "removed_from_envelopes": 374,
+    "examples": [
+      {
+        "organisation_number": "918525599",
+        "path": "profile.evidence.registry_live.value.website",
+        "text": "www.datingsolutions.net"
+      },
+      {
+        "organisation_number": "918525599",
+        "path": "profile.evidence.company_activity.source_url",
+        "text": "https://datingsolutions.net/"
+      },
+      {
+        "organisation_number": "918525599",
+        "path": "profile.evidence.company_jobs.source_url",
+        "text": "https://datingsolutions.net/"
+      },
+      {
+        "organisation_number": "918525599",
+        "path": "evidence[10].source_url",
+        "text": "https://datingsolutions.net/"
+      },
+      {
+        "organisation_number": "914776716",
+        "path": "profile.evidence.registry_live.value.website",
+        "text": "www.visitech.no"
+      },
+      {
+        "organisation_number": "914776716",
+        "path": "profile.evidence.company_activity.source_url",
+        "text": "https://visitech.com/"
+      },
+      {
+        "organisation_number": "914776716",
+        "path": "profile.evidence.company_jobs.source_url",
+        "text": "https://visitech.com/"
+      },
+      {
+        "organisation_number": "914776716",
+        "path": "evidence[10].source_url",
+        "text": "https://visitech.com/"
+      },
+      {
+        "organisation_number": "813246112",
+        "path": "profile.evidence.registry_live.value.website",
+        "text": "www.pizzabakeren.no"
+      },
+      {
+        "organisation_number": "813246112",
+        "path": "profile.evidence.company_activity.source_url",
+        "text": "https://www.pizzabakeren.no/"
+      },
+      {
+        "organisation_number": "813246112",
+        "path": "profile.evidence.company_jobs.source_url",
+        "text": "https://www.pizzabakeren.no/"
+      },
+      {
+        "organisation_number": "935932092",
+        "path": "profile.evidence.registry_live.value.website",
+        "text": "lovsikt.no"
+      },
+      {
+        "organisation_number": "935932092",
+        "path": "profile.evidence.company_activity.source_url",
+        "text": "http://lovsikt.no/"
+      },
+      {
+        "organisation_number": "935932092",
+        "path": "profile.evidence.company_jobs.source_url",
+        "text": "http://lovsikt.no/"
+      },
+      {
+        "organisation_number": "988850934",
+        "path": "profile.evidence.registry_live.value.website",
+        "text": "www.sea-tex.no"
+      },
+      {
+        "organisation_number": "988850934",
+        "path": "profile.evidence.company_activity.source_url",
+        "text": "https://www.sea-tex.no/"
+      },
+      {
+        "organisation_number": "988850934",
+        "path": "profile.evidence.company_jobs.source_url",
+        "text": "https://www.sea-tex.no/"
+      },
+      {
+        "organisation_number": "975801055",
+        "path": "profile.evidence.registry_live.value.website",
+        "text": "www.stangterrasse.no"
+      },
+      {
+        "organisation_number": "975801055",
+        "path": "profile.evidence.company_activity.source_url",
+        "text": "https://vibbo.no/?error=true&message=login_required&status=500&referenceId=srv-dcc49e77-55fb-41eb-b0bc-33b82dc1cf34"
+      },
+      {
+        "organisation_number": "975801055",
+        "path": "profile.evidence.company_jobs.source_url",
+        "text": "https://vibbo.no/?error=true&message=login_required&status=500&referenceId=srv-dcc49e77-55fb-41eb-b0bc-33b82dc1cf34"
+      }
+    ],
+    "diagnostics_file": "out/fb/r1100/envelopes.diagnostics.jsonl"
+  },
+  "site": {
+    "status": "ok",
+    "path": "out/fb/r1100/site/index.html",
+    "run_id": "rehearsal-1100",
+    "completed_at": "2026-11-14T20:43:41.471047Z",
+    "companies": 1100,
+    "company_pages": 1100,
+    "with_summary": 1099,
+    "with_verified_website": 105,
+    "with_dated_news": 10,
+    "with_jobs": 9,
+    "found": {
+      "accounts": 1097,
+      "roles": 1095,
+      "events": 0,
+      "website": 105,
+      "profiles": 53,
+      "news": 10,
+      "jobs": 9,
+      "related": 0
+    },
+    "entry": "index.html",
+    "compare": "compare.html"
+  },
+  "synthesis": {
+    "envelopes_with_summary": 1099,
+    "sentences": 12584
+  }
+}

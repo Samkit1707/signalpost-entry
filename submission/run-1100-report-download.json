@@ -1,0 +1,343 @@
+{
+  "run_id": "rehearsal-1100",
+  "started_at": "2026-11-14T19:38:47.276945Z",
+  "completed_at": "2026-11-14T20:05:36.239988Z",
+  "expected_count": 1100,
+  "emitted_envelopes": 1100,
+  "resumed_profiles": 0,
+  "phases": {
+    "registry": {
+      "companies": 1100,
+      "timed_out": [
+        "925786543",
+        "823720432",
+        "959331162",
+        "929275365"
+      ],
+      "finished_at_s": 1010.2
+    },
+    "enrichment": {
+      "companies": 1100,
+      "timed_out": [
+        "971520787"
+      ],
+      "finished_at_s": 1085.2
+    },
+    "events": {
+      "companies": 1100,
+      "timed_out": [],
+      "finished_at_s": 1085.5,
+      "skipped_for_deadline": 1100,
+      "skip_after_minutes": 20.0
+    },
+    "company_timeout_seconds": 240.0,
+    "rule": "registry work for every company is queued first in its own pool; each company's enrichment starts when its registry work is done; the change feed runs last, only after all registry work, and is skipped past half the deadline; a company past the limit keeps its row with failed modules"
+  },
+  "profiles_fetched_this_run": 1100,
+  "modules": [
+    "registry",
+    "accounting_obligation",
+    "registry_live",
+    "financials",
+    "roles",
+    "group",
+    "locations",
+    "registry_events",
+    "wikidata_footprint",
+    "website",
+    "workforce",
+    "external_profiles",
+    "company_activity",
+    "company_jobs",
+    "dated_news"
+  ],
+  "registry": {
+    "registry_snapshot_sha256": "d4d02e6d354274e7bfd00ee0f81da3751304dde901abc1513c5374922f4bc34c",
+    "registry_rows_scanned": 1181341,
+    "requested": 1100,
+    "selected": 1097,
+    "absent_from_snapshot": [
+      "926449087",
+      "922988854",
+      "917381348"
+    ]
+  },
+  "registry_download": {
+    "source": "downloaded",
+    "path": "out/fb/r1100/cache/brreg-enheter.csv.gz",
+    "url": "https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv",
+    "requests": 1,
+    "bytes": 155321921,
+    "elapsed_ms": 482963,
+    "retrieved_at": "2026-11-14T19:46:50Z",
+    "domain_filings": {
+      "domains": 85259,
+      "seconds": 13.8
+    }
+  },
+  "operations": {
+    "requests": 13287,
+    "bytes": 643976041,
+    "p50_ms": 275,
+    "p95_ms": 4160,
+    "requests_per_company": 12.08,
+    "projected_requests_for_1000": 12080,
+    "runtime_ms": 1639665
+  },
+  "budget": {
+    "max_requests": null,
+    "deadline_minutes": 40.0,
+    "stopped_early": false
+  },
+  "wikidata": {
+    "enabled": true,
+    "status": "ok",
+    "indexed_organisations": 16,
+    "requests": 6,
+    "cached": false,
+    "retrieved_at": "2026-11-14T19:47:30.473050Z",
+    "content_sha256": "920c04d457c8dc27b0045b97f563d21720e91830b1aa97df2dac8517fa39d2f6"
+  },
+  "coverage": {
+    "registry": 1097,
+    "accounting_obligation": 1097,
+    "registry_live": 1096,
+    "financials": 1094,
+    "roles": 1093,
+    "group": 76,
+    "locations": 845,
+    "registry_events": 0,
+    "wikidata_footprint": 15,
+    "website": 165,
+    "workforce": 179,
+    "external_profiles": 60,
+    "company_activity": 0,
+    "company_jobs": 12,
+    "dated_news": 8
+  },
+  "validation": {
+    "passed": true,
+    "checks": {
+      "exact_expected_count": true,
+      "unique_organisation_numbers": true,
+      "all_entity_states_terminal": true,
+      "all_module_states_terminal": true,
+      "zero_silent_drops": true
+    },
+    "invalid_states": [],
+    "citations": {
+      "published_claims": 43020,
+      "claims_outside_the_six_contract_states": 0,
+      "published_claims_missing_hash": 0,
+      "published_claims_missing_span": 0,
+      "citation_problems": 1,
+      "state_problems": 0,
+      "site_ownership_problems": 0,
+      "examples": {
+        "citation": [
+          {
+            "organisation_number": "935711851",
+            "field": "official_website",
+            "problem": "span_does_not_contain_value",
+            "evidence_ids": [
+              "ev-website-1"
+            ],
+            "claim_index": 13
+          }
+        ]
+      },
+      "passed": false,
+      "withheld_by_check": [],
+      "uncited_withheld": [
+        {
+          "organisation_number": "977142946",
+          "field": "official_website",
+          "module": "website",
+          "reason": "no exact span"
+        }
+      ]
+    }
+  },
+  "links": {
+    "published": {
+      "jobs": {
+        "high": 16,
+        "medium": 0,
+        "none": 0,
+        "companies": 12
+      },
+      "news": {
+        "high": 4,
+        "medium": 27,
+        "none": 0,
+        "companies": 8
+      },
+      "social": {
+        "high": 102,
+        "medium": 6,
+        "none": 0,
+        "companies": 60
+      },
+      "website": {
+        "high": 109,
+        "medium": 12,
+        "none": 0,
+        "companies": 121
+      }
+    },
+    "social_profiles": {
+      "companies": 58,
+      "profiles": 98,
+      "high": 92,
+      "medium": 6
+    },
+    "websites_by_method": {
+      "name_variant": 37,
+      "registry_email_domain": 8,
+      "registry_hjemmeside": 59,
+      "registry_record": 12,
+      "subunit_name": 1,
+      "subunit_registry_website": 2,
+      "wikidata_p856": 2
+    },
+    "candidates_not_published": {}
+  },
+  "retries": {
+    "website_pages_retried_once": 141,
+    "rule": "one retry on HTTP 429/503 (Retry-After <= 10 s) or a timeout"
+  },
+  "link_guard": {
+    "removed_from_envelopes": 387,
+    "examples": [
+      {
+        "organisation_number": "918525599",
+        "path": "profile.evidence.registry.value.hjemmeside",
+        "text": "www.datingsolutions.net"
+      },
+      {
+        "organisation_number": "918525599",
+        "path": "profile.evidence.registry_live.value.website",
+        "text": "www.datingsolutions.net"
+      },
+      {
+        "organisation_number": "918525599",
+        "path": "profile.evidence.company_activity.source_url",
+        "text": "https://datingsolutions.net/"
+      },
+      {
+        "organisation_number": "918525599",
+        "path": "profile.evidence.company_jobs.source_url",
+        "text": "https://datingsolutions.net/"
+      },
+      {
+        "organisation_number": "918525599",
+        "path": "evidence[11].source_url",
+        "text": "https://datingsolutions.net/"
+      },
+      {
+        "organisation_number": "914776716",
+        "path": "profile.evidence.registry.value.hjemmeside",
+        "text": "www.visitech.no"
+      },
+      {
+        "organisation_number": "914776716",
+        "path": "profile.evidence.registry_live.value.website",
+        "text": "www.visitech.no"
+      },
+      {
+        "organisation_number": "914776716",
+        "path": "profile.evidence.company_activity.source_url",
+        "text": "https://visitech.com/"
+      },
+      {
+        "organisation_number": "914776716",
+        "path": "profile.evidence.company_jobs.source_url",
+        "text": "https://visitech.com/"
+      },
+      {
+        "organisation_number": "914776716",
+        "path": "evidence[11].source_url",
+        "text": "https://visitech.com/"
+      },
+      {
+        "organisation_number": "813246112",
+        "path": "profile.evidence.registry.value.hjemmeside",
+        "text": "www.pizzabakeren.no"
+      },
+      {
+        "organisation_number": "813246112",
+        "path": "profile.evidence.registry_live.value.website",
+        "text": "www.pizzabakeren.no"
+      },
+      {
+        "organisation_number": "813246112",
+        "path": "profile.evidence.company_activity.source_url",
+        "text": "https://www.pizzabakeren.no/"
+      },
+      {
+        "organisation_number": "813246112",
+        "path": "profile.evidence.company_jobs.source_url",
+        "text": "https://www.pizzabakeren.no/"
+      },
+      {
+        "organisation_number": "813246112",
+        "path": "evidence[11].claim_span",
+        "text": "www.pizzabakeren.no"
+      },
+      {
+        "organisation_number": "971520787",
+        "path": "profile.evidence.registry.value.hjemmeside",
+        "text": "www.aalesund.steinerskolen.no"
+      },
+      {
+        "organisation_number": "971520787",
+        "path": "profile.evidence.wikidata_footprint.value.official_websites[0]",
+        "text": "https://www.aalesund.steinerskolen.no/"
+      },
+      {
+        "organisation_number": "971520787",
+        "path": "profile.evidence.wikidata_footprint.value.website_sources.https://www.aalesund.steinerskolen.no/.claim_span",
+        "text": "https://www.aalesund.steinerskolen.no/"
+      },
+      {
+        "organisation_number": "971520787",
+        "path": "profile.evidence.wikidata_footprint.value.wikipedia[0]",
+        "text": "https://no.wikipedia.org/wiki/Steinerskolen_i_%C3%85lesund"
+      },
+      {
+        "organisation_number": "971520787",
+        "path": "profile.evidence.wikidata_footprint.value.sitelink_sources.https://no.wikipedia.org/wiki/Steinerskolen_i_%C3%85lesund.claim_span",
+        "text": "https://no.wikipedia.org/wiki/Steinerskolen_i_%C3%85lesund"
+      }
+    ],
+    "diagnostics_file": "out/fb/r1100/envelopes.diagnostics.jsonl"
+  },
+  "site": {
+    "status": "ok",
+    "path": "out/fb/r1100/site/index.html",
+    "run_id": "rehearsal-1100",
+    "completed_at": "2026-11-14T20:05:36.239988Z",
+    "companies": 1100,
+    "company_pages": 1100,
+    "with_summary": 1100,
+    "with_verified_website": 109,
+    "with_dated_news": 8,
+    "with_jobs": 12,
+    "found": {
+      "accounts": 1094,
+      "roles": 1092,
+      "events": 0,
+      "website": 109,
+      "profiles": 58,
+      "news": 8,
+      "jobs": 12,
+      "related": 7
+    },
+    "entry": "index.html",
+    "compare": "compare.html"
+  },
+  "synthesis": {
+    "envelopes_with_summary": 1100,
+    "sentences": 17227
+  }
+}

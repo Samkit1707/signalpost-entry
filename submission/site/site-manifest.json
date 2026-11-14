@@ -1,12 +1,22 @@
 {
   "run_id": "smoke-final",
-  "completed_at": "2026-11-14T11:54:20.222675Z",
+  "completed_at": "2026-11-14T20:16:33.930552Z",
   "companies": 100,
   "company_pages": 100,
   "with_summary": 100,
   "with_verified_website": 6,
   "with_dated_news": 1,
   "with_jobs": 0,
+  "found": {
+    "accounts": 100,
+    "roles": 99,
+    "events": 100,
+    "website": 6,
+    "profiles": 2,
+    "news": 1,
+    "jobs": 0,
+    "related": 0
+  },
   "entry": "index.html",
   "compare": "compare.html"
 }

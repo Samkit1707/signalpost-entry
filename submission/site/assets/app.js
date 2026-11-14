@@ -7,17 +7,22 @@ const safe=u=>/^https?:\/\//i.test(String(u||''))?u:null;
 const MAX=3;
 function selected(){try{return JSON.parse(sessionStorage.getItem('sp-compare')||'[]')}catch(e){return []}}
 function store(v){try{sessionStorage.setItem('sp-compare',JSON.stringify(v))}catch(e){}}
-// Index: search, filters, compare tray.
+// Index: search, sort, filters, compare tray (the list is pre-rendered, sorted by most data found; this only re-orders/filters).
 const list=document.getElementById('companies');
 if(list){
   const rows=[...list.querySelectorAll('li[data-org]')],q=document.getElementById('q'),st=document.getElementById('status'),
-        web=document.getElementById('has-website'),news=document.getElementById('has-news'),jobs=document.getElementById('has-jobs'),count=document.getElementById('count'),
-        tray=document.getElementById('tray-names'),go=document.getElementById('compare-go'),clear=document.getElementById('compare-clear');
+        sort=document.getElementById('sort'),place=document.getElementById('place'),ind=document.getElementById('industry'),area=document.getElementById('area'),
+        count=document.getElementById('count'),tray=document.getElementById('tray-names'),go=document.getElementById('compare-go'),clear=document.getElementById('compare-clear');
   let picks=selected().filter(o=>rows.some(r=>r.dataset.org===o));
+  const params=new URLSearchParams(location.search);
+  if(params.get('q'))q.value=params.get('q');if(params.get('area'))area.value=params.get('area');
+  function order(){const k=sort.value;const sorted=[...rows].sort((a,b)=>k==='name'?a.dataset.label.localeCompare(b.dataset.label,'nb'):
+      k==='revenue'?(parseFloat(b.dataset.revenue||'-1e18')-parseFloat(a.dataset.revenue||'-1e18')):(parseFloat(b.dataset.score)-parseFloat(a.dataset.score))||a.dataset.label.localeCompare(b.dataset.label,'nb'));
+    sorted.forEach(r=>list.appendChild(r))}
   function apply(){
     const text=fold(q.value);let shown=0;
-    rows.forEach(r=>{const okText=!text||r.dataset.name.includes(text);
-      const ok=okText&&(!st.value||r.dataset.status===st.value)&&(!web.checked||r.dataset.website==='1')&&(!news.checked||r.dataset.news==='1')&&(!jobs.checked||r.dataset.jobs==='1');
+    rows.forEach(r=>{const ok=(!text||r.dataset.name.includes(text))&&(!st.value||r.dataset.status===st.value)&&(!place.value||r.dataset.place===place.value)
+      &&(!ind.value||r.dataset.division===ind.value)&&(!area.value||(' '+r.dataset.areas+' ').includes(' '+area.value+' '));
       r.hidden=!ok;if(ok)shown++});
     count.textContent=shown+' of '+rows.length+' companies';
   }
@@ -30,11 +35,10 @@ if(list){
     picks=box.checked?[...new Set([...picks,org])].slice(0,MAX):picks.filter(o=>o!==org);renderTray()});
   go.addEventListener('click',()=>{location.href='compare.html?orgs='+picks.join(',')});
   clear.addEventListener('click',()=>{picks=[];renderTray()});
-  [q,st,web,news,jobs].forEach(el=>el.addEventListener(el===q?'input':'change',apply));
-  const initial=new URLSearchParams(location.search).get('q');if(initial)q.value=initial;
-  apply();renderTray();
+  q.addEventListener('input',apply);[st,place,ind,area].forEach(el=>el.addEventListener('change',apply));sort.addEventListener('change',()=>{order();apply()});
+  order();apply();renderTray();
 }
-// Compare view.
+// Compare view: the page is pre-rendered (all companies, key facts); with ?orgs= this adds a side-by-side view on top.
 const cmp=document.getElementById('compare');
 if(cmp){
   const COMPANIES=window.SP_COMPANIES||[],byOrg=Object.fromEntries(COMPANIES.map(c=>[c[0],c[1]])),loaded={};
@@ -42,6 +46,7 @@ if(cmp){
   let orgs=(new URLSearchParams(location.search).get('orgs')||'').split(',').map(digits).filter(o=>byOrg[o]).slice(0,MAX);
   if(!orgs.length)orgs=selected().filter(o=>byOrg[o]).slice(0,MAX);
   const pickers=[...document.querySelectorAll('.pick')];
+  document.getElementById('pickers').hidden=false;
   pickers.forEach((input,i)=>{input.value=orgs[i]?byOrg[orgs[i]]+' — '+orgs[i]:'';
     input.addEventListener('change',()=>{const m=digits(input.value.split('—').pop());const next=pickers.map((p,j)=>j===i?m:orgs[j]).filter(o=>o&&byOrg[o]);
       orgs=[...new Set(next)].slice(0,MAX);store(orgs);history.replaceState(null,'','?orgs='+orgs.join(','));load()})});
@@ -50,10 +55,10 @@ if(cmp){
   function cell(f){if(!f)return '<span class="missing">Not available</span><span class="reason">Not checked for this company</span>';
     const val=f.link&&safe(f.link)?'<a href="'+esc(f.link)+'" target="_blank" rel="noopener noreferrer">'+esc(f.text)+'</a>':esc(f.text);
     const dates=[f.as_of?'as of '+esc(f.as_of):'',f.retrieved?'retrieved '+esc(f.retrieved):''].filter(Boolean).join(' · ');
-    const src=safe(f.src)?'<a href="'+esc(f.src)+'" target="_blank" rel="noopener noreferrer">source ↗</a>':'no source';
-    return '<span class="'+(f.missing?'missing':'')+'">'+val+'</span>'+(f.reason?'<span class="reason">'+esc(f.reason)+'</span>':'')+'<span class="src">'+src+(dates?' · '+dates:'')+(f.ev?' · <code>'+esc(f.ev)+'</code>':'')+'</span>'}
+    const src=safe(f.src)?'<a class="check" href="'+esc(f.src)+'" target="_blank" rel="noopener noreferrer">Check the evidence ↗</a>':'no source';
+    return '<span class="'+(f.missing?'missing':'')+'">'+val+'</span>'+(f.reason?'<span class="reason">'+esc(f.reason)+'</span>':'')+'<span class="src">'+src+(dates?' · '+dates:'')+'</span>'}
   function render(){
-    if(orgs.length<2){cmp.innerHTML='<p class="empty">Choose at least two companies above, or pick them on the <a href="index.html">search page</a>.</p>';return}
+    if(orgs.length<2){cmp.innerHTML='<p class="empty">Choose two or three companies above for a side-by-side view, or use the table below.</p>';return}
     const data=orgs.map(o=>loaded[o]);if(data.some(d=>!d)){cmp.innerHTML='<p class="empty">Loading…</p>';return}
     const keys=[];data.forEach(d=>d.facts.forEach(f=>{if(!keys.some(k=>k[0]===f.key))keys.push([f.key,f.label])}));
     let out='<div class="cmp" style="--n:'+data.length+'"><div class="r h-row"><div class="l">Company</div>'+data.map(d=>'<div class="h"><a href="companies/'+esc(d.org)+'.html">'+esc(d.name)+'</a></div>').join('')+'</div>';

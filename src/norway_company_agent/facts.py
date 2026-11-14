@@ -181,11 +181,46 @@ def location_facts(value: dict[str, Any]) -> list[Fact]:
                     "nace_code": industry.get("kode"), "nace_description": industry.get("beskrivelse"),
                     "employees": item.get("employees"), "start_date": item.get("start_date")}
         if item.get("website"):
-            # the sub-unit's own website entry in the registry; only present when it is the company's verified site
+            # the sub-unit's own website entry in the registry (ambiguous domains were removed before this point)
             location["subunit_website"] = item["website"]
-            location["subunit_website_note"] = ("the sub-unit's own website entry in the Brønnøysund register; the same "
-                                                 "domain as the company's verified website")
+            location["subunit_website_note"] = (
+                "the sub-unit's own website entry in the Brønnøysund register; the same domain as the company's verified website"
+                if item.get("website_relation") == "same_as_verified_site" else
+                "the sub-unit's own website entry in the Brønnøysund register (a domain no other company files); "
+                "labelled as the sub-unit's site, not the company's own")
         facts.append(("registered_location", location, item.get("claim_span"), item.get("start_date")))
+    return facts
+
+
+def related_website_facts(value: dict[str, Any]) -> list[Fact]:
+    """A sub-unit's registered website on a domain only that filer uses: the sub-unit's site, never the company's own."""
+    facts = []
+    for item in value.get("locations") or []:
+        if item.get("website") and item.get("website_relation") == "subunit_site":
+            raw = str(item["website"]).strip()
+            url = raw if "://" in raw else "https://" + raw
+            facts.append(("related_website", {
+                "url": url, "relationship": "registered website of a sub-unit (underenhet); not the company's own website",
+                "subunit_organisation_number": item.get("organisation_number"), "subunit_name": _clean(item.get("name")),
+                "label": f"Website of the sub-unit {_clean(item.get('name')) or ''} ({item.get('organisation_number')})".replace("  ", " "),
+                **({"site_proof": item["website_site_proof"]} if item.get("website_site_proof") else {})},
+                item.get("claim_span"), None))
+    return facts
+
+
+MAX_EVENT_CLAIMS = 30
+
+
+def registry_event_facts(value: dict[str, Any]) -> list[Fact]:
+    """One dated claim per registry change (newest first, capped), each cited in the update-feed response it came from."""
+    facts = []
+    for item in (value.get("events") or [])[:MAX_EVENT_CLAIMS]:
+        facts.append(("registry_event", {key: item.get(key) for key in (
+            "date", "type", "entity", "organisation_number", "field", "field_label", "old", "old_stated", "new", "value_note")
+            if key != "value_note" or item.get(key)},
+            item.get("claim_span"), item.get("date"),
+            {"source_url": item.get("source_url"), "content_sha256": item.get("content_sha256"),
+             "retrieved_at": item.get("retrieved_at"), "span_kind": "field_path"}))
     return facts
 
 
@@ -310,7 +345,8 @@ def fact_claims(profile: dict[str, Any], records: dict[str, Any], module_states:
 
     if registry_row and registry_record:
         emit("registry", registry_record, registry_facts(registry_row))
-    for module, builder in (("roles", role_facts), ("locations", location_facts), ("financials", account_facts)):
+    for module, builder in (("roles", role_facts), ("locations", location_facts), ("financials", account_facts),
+                            ("locations", related_website_facts), ("registry_events", registry_event_facts)):
         record = available(module)
         if record:
             emit(module, record, builder(record.get("value") or {}))

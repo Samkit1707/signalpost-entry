@@ -110,7 +110,7 @@ def test_subunit_site_label_only_when_it_is_the_companys_verified_site():
     location = next(c for c in env["claims"] if c["field"] == "registered_location")
     assert location["availability"] == "available" and "subunit_website" not in location["value"]
     assert "cetho" not in json.dumps(env) and env["link_guard"]["removed"] == 0
-    assert diagnostics["subunit_sites_not_labelled"][0]["website"] == "www.cetho.no"
+    assert diagnostics["subunit_sites_not_published"][0]["website"] == "www.cetho.no"
     # the same registered domain as the verified website: labelled on the location claim
     same = subunit_profile("www.firma.no")
     same["evidence"]["website"] = verified(identity_assessment={"status": "exact", "score": 1.0, "publishable": True, "reasons": ["org"]})

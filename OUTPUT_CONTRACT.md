@@ -77,14 +77,40 @@ is `not_available` with a note. `external_profiles` and `dated_news` claims may 
 `external_profiles` value restricted to social platforms, each entry `{platform, url, confidence, proof}`, same evidence.
 Synthesis topics add `why_it_matters`; method `template_from_claims_v2`.
 
-Summary sections (method `template_from_claims_sections`): sentence topics are `headline` (the buyer fact, first),
-`why_it_matters`,
-`what_it_does` (one register sentence: legal form, place, registered activity, NACE; plus the verified site's own
-meta/og description, quoted and attributed), `financials` (full latest figures), `changes` (filed-year revenue, annual
-result and equity with direction and %, each year's figure claim cited; register status; dated news and job postings with
-dates), `signal` (2–3 labelled observations from sourced numbers, sentence key `label`), `unknown` (one sentence per
-missing family with the reason, sentence key `family`: `website`, `news`, `jobs`, `profiles`, `employees`, `roles`,
-`financials`, `financial_trend`, `registry_history`) and `profile` (founding, roles, sub-units, profiles).
-`why_it_matters` (topic and key) stays one plain line on what the year-on-year change means, built only from the two
-cited filed years. `synthesis.signals` lists the signal sentences as `{label, text, evidence_ids}`.
+Summary (method `template_from_claims_five_sections`): every sentence has a `section` — `brief`, `financials`, `people`,
+`work`, `activity` (Company brief, Latest financials, Who runs it, Working here, Recent activity; listed in
+`synthesis.sections`) — and a `topic`: `headline` (the buyer fact, first), `why_it_matters` (one line, from the two cited
+filed years, naming no amount), `what_it_does` (register sentence; the verified site's own description, quoted; a
+registry-listed site that could not be read; sub-unit websites), `signal` (≤3 labelled observations, key `label`, no
+amounts), `financials` (the newest filed year's figures not already named, with operating margin and equity ratio),
+`changes` (earlier filed year with direction and the earlier amount only; dated registry change events; register status),
+`news`, `people`, `work`, `profile` and `unknown` (one short line per missing family, key `family`: `website`, `news`,
+`jobs`, `profiles`, `employees`, `roles`, `financials`, `financial_trend`, `registry_history`). Each figure appears once.
+`synthesis.signals` lists the signal sentences as `{label, text, evidence_ids}`.
+
+New claims:
+- `registry_event` (fact-level, one per stated change, newest 30): `{date, type, entity, organisation_number, field,
+  field_label, old, old_stated, new}`. Only `Ny` (registered), `Sletting`/`Fjernet` (deleted/removed), an `Endring` that
+  names at least one changed field are published; an `Endring` without change
+  details and `Ukjent` go to the diagnostics file (`registry_events_not_published`). `date` and `as_of` are the date as
+  written in the feed timestamp (its first 10 characters, no timezone shift), cited in the update-feed response
+  (`/oppdateringer/enheter?organisasjonsnummer=…&includeChanges=true`). `old` is set only when the feed stated it
+  (`old_stated`); website and e-mail values are not published (`value_note`). Aggregate `registry_events`
+  `{events, newest_date, oldest_date, entities}`; when the run skipped the feed past half its deadline it is
+  `not_available` with `note: "skipped to protect the run deadline"`.
+- `related_website` (fact-level): a sub-unit's registered website `{url, relationship, subunit_organisation_number,
+  subunit_name, label, site_proof}`, confidence `medium`; never the company's own website. Published only when the domain
+  resolves, stays on the filed domain, and a page prints the sub-unit's or the parent's org number or exact legal name;
+  `site_proof` is `{kind: org_number|legal_name, who: sub-unit|parent, value, page_url, content_sha256, retrieved_at}`.
+- `official_website` may carry `website_source: "registry_record"` with a `note` ("site unreachable at crawl time"):
+  published from the registry record when the registry-listed site could not be read, its domain is this company's
+  alone and still resolves in DNS (`discovery_method: "registry_record"`, confidence `medium`).
+- A module that passed the per-company time limit (`--company-timeout-seconds`) is `failed` with a `company_time_limit`
+  note; the envelope is still emitted.
+
+Source links: an evidence `source_url` opens the per-company record — `/enhetsregisteret/api/enheter/<org>` (registry
+facts, including those read from the bulk file), `/underenheter/<org>` (a sub-unit fact), `/regnskapsregisteret/regnskap/<org>`
+(accounts), the Wikidata item page (`https://www.wikidata.org/wiki/Q…`) — never the bulk CSV or the SPARQL endpoint. When
+the cited span and hash come from another response (the bulk file row, a sub-unit list, the Wikidata query), `read_from`
+names it.
 The website reason counts candidate domains checked but never names a rejected one.

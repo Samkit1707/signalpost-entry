@@ -1,0 +1,79 @@
+#1  930856916 BASE HOME AS
+  published claim: {"date": "2026-11-04", "type": "changed", "entity": "main unit", "organisation_number": "930856916", "field": "erIKonsern", "field_label": "part of a group", "old": null, "old_stated": false, "new": true}
+  as_of: 2026-11-04
+  source: https://data.brreg.no/enhetsregisteret/api/oppdateringer/enheter?organisasjonsnummer=930856916&includeChanges=true&size=100
+  cited span: $._embedded.oppdaterteEnheter[9].organisasjonsnummer="930856916"; $._embedded.oppdaterteEnheter[9].dato="2026-11-04T00:01:28.902+01:00"; $._embedded.oppdaterteEnheter[9].endringstype="Endring"; $._embedded.oppdaterteEnheter[9].endringer[0].op="replace"; $._embedded.oppdaterteEnheter[9].endringer[0].path="/erIKonsern"; $._embedded.oppdaterteEnheter[9].endringer[0].value=true
+  response hash then 83769fd1f67a8cab… now different; entry at the cited index has the same org number and instant: yes
+  source entry: {"_links": {"enhet": {"href": "https://data.brreg.no/enhetsregisteret/api/enheter/930856916"}}, "dato": "2026-11-03T23:01:28.902Z", "endringer": [{"op": "replace", "path": "/erIKonsern", "value": true}], "endringstype": "Endring", "oppdateringsid": 25422052, "organisasjonsnummer": "930856916"}
+
+#2  935013623 MINKRYPTO AS
+  published claim: {"date": "2025-02-10", "type": "registered", "entity": "main unit", "organisation_number": "935013623", "field": null, "field_label": "record", "old": null, "old_stated": false, "new": null}
+  as_of: 2025-02-10
+  source: https://data.brreg.no/enhetsregisteret/api/oppdateringer/enheter?organisasjonsnummer=935013623&includeChanges=true&size=100
+  cited span: $._embedded.oppdaterteEnheter[0].organisasjonsnummer="935013623"; $._embedded.oppdaterteEnheter[0].dato="2025-02-10T14:10:12.715Z"; $._embedded.oppdaterteEnheter[0].endringstype="Ny"
+  response hash then 25692dc62f247367… now different; entry at the cited index has the same org number and instant: yes
+  source entry: {"_links": {"enhet": {"href": "https://data.brreg.no/enhetsregisteret/api/enheter/935013623"}}, "dato": "2025-02-10T15:10:12.715+01:00", "endringstype": "Ny", "oppdateringsid": 20183116, "organisasjonsnummer": "935013623"}
+
+#3  896331922 ANGEL HOLDING AS
+  published claim: {"date": "2026-02-12", "type": "changed", "entity": "main unit", "organisation_number": "896331922", "field": "forretningsadresse.adresse.0", "field_label": "business address (street)", "old": null, "old_stated": false, "new": "Angeltveitvegen 3"}
+  as_of: 2026-02-12
+  source: https://data.brreg.no/enhetsregisteret/api/oppdateringer/enheter?organisasjonsnummer=896331922&includeChanges=true&size=100
+  cited span: $._embedded.oppdaterteEnheter[13].organisasjonsnummer="896331922"; $._embedded.oppdaterteEnheter[13].dato="2026-02-12T12:30:12.538+01:00"; $._embedded.oppdaterteEnheter[13].endringstype="Endring"; $._embedded.oppdaterteEnheter[13].endringer[0].op="replace"; $._embedded.oppdaterteEnheter[13].endringer[0].path="/forretningsadresse/adresse/0"; $._embedded.oppdaterteEnheter[13].endringer[0].value="Angeltveitvegen 3"
+  response hash then 6244bbd95dad690e… now different; entry at the cited index has the same org number and instant: yes
+  source entry: {"_links": {"enhet": {"href": "https://data.brreg.no/enhetsregisteret/api/enheter/896331922"}}, "dato": "2026-02-12T11:30:12.538Z", "endringer": [{"op": "replace", "path": "/forretningsadresse/adresse/0", "value": "Angeltveitvegen 3"}], "endringstype": "Endring", "oppdateringsid": 23827299, "organisasjonsnummer": "896331922"}
+
+#4  931467425 AQUAPREDICT AS
+  published claim: {"date": "2026-01-09", "type": "changed", "entity": "main unit", "organisation_number": "931467425", "field": "forretningsadresse.adresse.0", "field_label": "business address (street)", "old": null, "old_stated": false, "new": "c/o Salmon Center"}
+  as_of: 2026-01-09
+  source: https://data.brreg.no/enhetsregisteret/api/oppdateringer/enheter?organisasjonsnummer=931467425&includeChanges=true&size=100
+  cited span: $._embedded.oppdaterteEnheter[9].organisasjonsnummer="931467425"; $._embedded.oppdaterteEnheter[9].dato="2026-01-09T13:55:11.270Z"; $._embedded.oppdaterteEnheter[9].endringstype="Endring"; $._embedded.oppdaterteEnheter[9].endringer[1].op="replace"; $._embedded.oppdaterteEnheter[9].endringer[1].path="/forretningsadresse/adresse/0"; $._embedded.oppdaterteEnheter[9].endringer[1].value="c/o Salmon Center"
+  response hash then 70950177ac44b4bf… now different; entry at the cited index has the same org number and instant: yes
+  source entry: {"_links": {"enhet": {"href": "https://data.brreg.no/enhetsregisteret/api/enheter/931467425"}}, "dato": "2026-01-09T14:55:11.270+01:00", "endringer": [{"op": "replace", "path": "/forretningsadresse/postnummer", "value": "8006"}, {"op": "replace", "path": "/forretningsadresse/adresse/0", "value": "c/o Salmon Center"}, {"op": "replace", "path": "/forretningsadresse/adresse/1", "value": "Sjøgata 21"}], "endringstype": "Endring", "oppdateringsid": 23578752, "organisasjonsnummer": "931467425"}
+
+#5  932072602 TRÅD HÅNDVERK AS
+  published claim: {"date": "2026-07-14", "type": "changed", "entity": "main unit", "organisation_number": "932072602", "field": "sisteInnsendteAarsregnskap", "field_label": "latest filed annual accounts", "old": null, "old_stated": false, "new": "2025"}
+  as_of: 2026-07-14
+  source: https://data.brreg.no/enhetsregisteret/api/oppdateringer/enheter?organisasjonsnummer=932072602&includeChanges=true&size=100
+  cited span: $._embedded.oppdaterteEnheter[5].organisasjonsnummer="932072602"; $._embedded.oppdaterteEnheter[5].dato="2026-07-14T18:03:37.753Z"; $._embedded.oppdaterteEnheter[5].endringstype="Endring"; $._embedded.oppdaterteEnheter[5].endringer[0].op="replace"; $._embedded.oppdaterteEnheter[5].endringer[0].path="/sisteInnsendteAarsregnskap"; $._embedded.oppdaterteEnheter[5].endringer[0].value="2025"
+  response hash then 67bc975d69b99ba1… now identical; entry at the cited index has the same org number and instant: yes
+  source entry: {"_links": {"enhet": {"href": "https://data.brreg.no/enhetsregisteret/api/enheter/932072602"}}, "dato": "2026-07-14T18:03:37.753Z", "endringer": [{"op": "replace", "path": "/sisteInnsendteAarsregnskap", "value": "2025"}], "endringstype": "Endring", "oppdateringsid": 24838543, "organisasjonsnummer": "932072602"}
+
+#6  917364907 PAJOMI AS
+  published claim: {"date": "2026-02-25", "type": "changed", "entity": "main unit", "organisation_number": "917364907", "field": "sisteInnsendteAarsregnskap", "field_label": "latest filed annual accounts", "old": null, "old_stated": false, "new": "2025"}
+  as_of: 2026-02-25
+  source: https://data.brreg.no/enhetsregisteret/api/oppdateringer/enheter?organisasjonsnummer=917364907&includeChanges=true&size=100
+  cited span: $._embedded.oppdaterteEnheter[14].organisasjonsnummer="917364907"; $._embedded.oppdaterteEnheter[14].dato="2026-02-25T20:01:37.344+01:00"; $._embedded.oppdaterteEnheter[14].endringstype="Endring"; $._embedded.oppdaterteEnheter[14].endringer[0].op="replace"; $._embedded.oppdaterteEnheter[14].endringer[0].path="/sisteInnsendteAarsregnskap"; $._embedded.oppdaterteEnheter[14].endringer[0].value="2025"
+  response hash then 157f8d99db861f02… now different; entry at the cited index has the same org number and instant: yes
+  source entry: {"_links": {"enhet": {"href": "https://data.brreg.no/enhetsregisteret/api/enheter/917364907"}}, "dato": "2026-02-25T19:01:37.344Z", "endringer": [{"op": "replace", "path": "/sisteInnsendteAarsregnskap", "value": "2025"}], "endringstype": "Endring", "oppdateringsid": 23912764, "organisasjonsnummer": "917364907"}
+
+#7  931467425 AQUAPREDICT AS
+  published claim: {"date": "2026-08-26", "type": "changed", "entity": "main unit", "organisation_number": "931467425", "field": "kapital.antallAksjer", "field_label": "number of shares", "old": null, "old_stated": false, "new": 12396}
+  as_of: 2026-08-26
+  source: https://data.brreg.no/enhetsregisteret/api/oppdateringer/enheter?organisasjonsnummer=931467425&includeChanges=true&size=100
+  cited span: $._embedded.oppdaterteEnheter[13].organisasjonsnummer="931467425"; $._embedded.oppdaterteEnheter[13].dato="2026-08-26T11:45:12.143Z"; $._embedded.oppdaterteEnheter[13].endringstype="Endring"; $._embedded.oppdaterteEnheter[13].endringer[1].op="replace"; $._embedded.oppdaterteEnheter[13].endringer[1].path="/kapital/antallAksjer"; $._embedded.oppdaterteEnheter[13].endringer[1].value=12396
+  response hash then 70950177ac44b4bf… now different; entry at the cited index has the same org number and instant: yes
+  source entry: {"_links": {"enhet": {"href": "https://data.brreg.no/enhetsregisteret/api/enheter/931467425"}}, "dato": "2026-08-26T13:45:12.143+02:00", "endringer": [{"op": "replace", "path": "/vedtektsdato", "value": "2026-01-09"}, {"op": "replace", "path": "/kapital/antallAksjer", "value": 12396}, {"op": "replace", "path": "/kapital/innfortDato", "value": "2026-08-26"}, {"op": "replace", "path": "/kapital/belop", "value": 123960.0}], "endringstype": "Endring", "oppdateringsid": 25137551, "organisasjonsnummer": "931467425"}
+
+#8  917364907 PAJOMI AS
+  published claim: {"date": "2026-06-08", "type": "changed", "entity": "main unit", "organisation_number": "917364907", "field": "naeringskode1.kode", "field_label": "main industry code", "old": null, "old_stated": false, "new": "00.000"}
+  as_of: 2026-06-08
+  source: https://data.brreg.no/enhetsregisteret/api/oppdateringer/enheter?organisasjonsnummer=917364907&includeChanges=true&size=100
+  cited span: $._embedded.oppdaterteEnheter[15].organisasjonsnummer="917364907"; $._embedded.oppdaterteEnheter[15].dato="2026-06-08T08:20:11.733+02:00"; $._embedded.oppdaterteEnheter[15].endringstype="Endring"; $._embedded.oppdaterteEnheter[15].endringer[1].op="replace"; $._embedded.oppdaterteEnheter[15].endringer[1].path="/naeringskode1/kode"; $._embedded.oppdaterteEnheter[15].endringer[1].value="00.000"
+  response hash then 157f8d99db861f02… now different; entry at the cited index has the same org number and instant: yes
+  source entry: {"_links": {"enhet": {"href": "https://data.brreg.no/enhetsregisteret/api/enheter/917364907"}}, "dato": "2026-06-08T06:20:11.733Z", "endringer": [{"op": "replace", "path": "/forretningsadresse/adresse/0", "value": "c/o Paal Lyche"}, {"op": "replace", "path": "/naeringskode1/kode", "value": "00.000"}, {"op": "replace", "path": "/naeringskode1/beskrivelse", "value": "Uoppgitt"}, {"op": "remove", "path": "/aktivitet/1"}, {"op": "replace", "path": "/aktivitet/0", "value": "Holdingselskap."}], "endringstype": "Endring", "oppdateringsid": 24552813, "organisasjonsnummer": "917364907"}
+
+#9  935095190 FJELLGLØD HOLDING AS
+  published claim: {"date": "2026-09-15", "type": "changed", "entity": "main unit", "organisation_number": "935095190", "field": "naeringskode1.beskrivelse", "field_label": "main industry description", "old": null, "old_stated": false, "new": "Skjønnhetspleie"}
+  as_of: 2026-09-15
+  source: https://data.brreg.no/enhetsregisteret/api/oppdateringer/enheter?organisasjonsnummer=935095190&includeChanges=true&size=100
+  cited span: $._embedded.oppdaterteEnheter[4].organisasjonsnummer="935095190"; $._embedded.oppdaterteEnheter[4].dato="2026-09-15T22:01:03.811Z"; $._embedded.oppdaterteEnheter[4].endringstype="Endring"; $._embedded.oppdaterteEnheter[4].endringer[2].op="replace"; $._embedded.oppdaterteEnheter[4].endringer[2].path="/naeringskode1/beskrivelse"; $._embedded.oppdaterteEnheter[4].endringer[2].value="Skjønnhetspleie"
+  response hash then 82af7f80ee9761bb… now different; entry at the cited index has the same org number and instant: yes
+  source entry: {"_links": {"enhet": {"href": "https://data.brreg.no/enhetsregisteret/api/enheter/935095190"}}, "dato": "2026-09-16T00:01:03.811+02:00", "endringer": [{"op": "add", "path": "/hjelpeenhetskode", "value": {"kode": "70.100", "beskrivelse": "Hovedkontortjenester"}}, {"op": "replace", "path": "/naeringskode1/kode", "value": "96.220"}, {"op": "replace", "path": "/naeringskode1/beskrivelse", "value": "Skjønnhetspleie"}], "endringstype": "Endring", "oppdateringsid": 25240129, "organisasjonsnummer": "935095190"}
+
+#10  933460371 S. ANDREASSEN HOLDING AS
+  published claim: {"date": "2025-09-15", "type": "changed", "entity": "main unit", "organisation_number": "933460371", "field": "naeringskode1.beskrivelse", "field_label": "main industry description", "old": null, "old_stated": false, "new": "Reparasjon og vedlikehold av motorvogner"}
+  as_of: 2025-09-15
+  source: https://data.brreg.no/enhetsregisteret/api/oppdateringer/enheter?organisasjonsnummer=933460371&includeChanges=true&size=100
+  cited span: $._embedded.oppdaterteEnheter[2].organisasjonsnummer="933460371"; $._embedded.oppdaterteEnheter[2].dato="2025-09-15T22:31:57.203Z"; $._embedded.oppdaterteEnheter[2].endringstype="Endring"; $._embedded.oppdaterteEnheter[2].endringer[2].op="replace"; $._embedded.oppdaterteEnheter[2].endringer[2].path="/naeringskode1/beskrivelse"; $._embedded.oppdaterteEnheter[2].endringer[2].value="Reparasjon og vedlikehold av motorvogner"
+  response hash then 539a07ccdbf2e06a… now different; entry at the cited index has the same org number and instant: yes
+  source entry: {"_links": {"enhet": {"href": "https://data.brreg.no/enhetsregisteret/api/enheter/933460371"}}, "dato": "2025-09-16T00:31:57.203+02:00", "endringer": [{"op": "add", "path": "/hjelpeenhetskode", "value": {"kode": "70.100", "beskrivelse": "Hovedkontortjenester"}}, {"op": "replace", "path": "/naeringskode1/kode", "value": "95.310"}, {"op": "replace", "path": "/naeringskode1/beskrivelse", "value": "Reparasjon og vedlikehold av motorvogner"}], "endringstype": "Endring", "oppdateringsid": 22079079, "organisasjonsnummer": "933460371"}

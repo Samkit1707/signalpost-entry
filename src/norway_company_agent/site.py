@@ -91,7 +91,12 @@ def _org_name(value: Any) -> str:
     return str(value or "")
 
 
-FACT_FAMILY = {"website": "website", "news": "news", "jobs": "jobs", "profiles": "profiles", "employees": "employees",
+FACT_SECTION = {"legal_name": "brief", "organisation_number": "brief", "legal_form": "brief", "industry": "brief",
+                "business_address": "brief", "registry_status": "brief", "website": "brief", "profiles": "brief",
+                "related_sites": "brief", "fiscal_year": "financials", "revenue": "financials", "operating_result": "financials",
+                "annual_result": "financials", "equity": "financials", "previous_revenue": "financials", "roles": "people",
+                "group": "people", "locations": "people", "employees": "work", "jobs": "work", "news": "activity", "events": "activity"}
+FACT_FAMILY = {"events": "registry_history", "website": "website", "news": "news", "jobs": "jobs", "profiles": "profiles", "employees": "employees",
                "roles": "roles", "fiscal_year": "financials", "revenue": "financials", "operating_result": "financials",
                "annual_result": "financials", "equity": "financials", "previous_revenue": "financial_trend"}
 
@@ -165,7 +170,10 @@ def company_facts(envelope: dict[str, Any]) -> list[dict[str, Any]]:
         facts[-1]["missing"] = True
 
     website = value("official_website")
-    add("website", "Verified website", "official_website", website, link=website)
+    registry_only = (_claim(envelope, "official_website") or {}).get("website_source") == "registry_record"
+    add("website", "Website (registry record; site not readable)" if registry_only else "Verified website", "official_website",
+        website, link=website)
+    facts[-1]["registry_only"] = registry_only
     profiles = value("social_profiles") or []
     add("profiles", "Social profiles", "social_profiles",
         " · ".join(f"{item.get('platform')}: {item.get('url')} ({item.get('confidence') or '?'})" for item in profiles) if profiles else None,
@@ -189,11 +197,24 @@ def company_facts(envelope: dict[str, Any]) -> list[dict[str, Any]]:
     add("group", "Corporate group", "group_structure", f"{len(group)} related entit{'y' if len(group) == 1 else 'ies'}" if group else None)
     locations = value("registered_locations") or []
     add("locations", "Registered sub-units", "registered_locations", f"{len(locations)}" if locations else None)
+    events = [claim for claim in _claims(envelope, "registry_event") if claim.get("availability") == "available"]
+    if events:
+        facts.append(_fact(envelope, evidence, "events", "Register changes", events[0],
+                           f"{len(events)} dated change{'s' if len(events) != 1 else ''}, latest {events[0]['value'].get('date')}"))
+    elif _claim(envelope, "registry_events"):  # only when the change feed was read for this run
+        add("events", "Register changes", "registry_events", None)
+    related = [claim for claim in _claims(envelope, "related_website") if claim.get("availability") == "available"]
+    if related:
+        facts.append(_fact(envelope, evidence, "related_sites", "Sub-unit websites", related[0],
+                           " · ".join(f"{claim['value']['url']} ({claim['value'].get('subunit_name') or 'sub-unit'})" for claim in related[:3]),
+                           link=related[0]["value"]["url"]))
+    for fact in facts:
+        fact["section"] = FACT_SECTION.get(fact["key"], "brief")
     for fact in facts:
         family = FACT_FAMILY.get(fact["key"])
         if fact["missing"] and family in reasons and not (family == "employees" and fact["key"] != "employees"):
             fact["reason"] = reasons[family]
-            if fact["key"] in {"website", "news", "jobs", "profiles", "employees", "roles"}:
+            if fact["key"] in {"website", "news", "jobs", "profiles", "employees", "roles", "events"}:
                 fact["text"] = "Not available"
     return facts
 
@@ -210,16 +231,41 @@ def _status_key(envelope: dict[str, Any]) -> str:
     return "active"
 
 
+def _area_flags(envelope: dict[str, Any], facts: dict[str, dict[str, Any]]) -> dict[str, bool]:
+    def has(field: str) -> bool:
+        return any(claim.get("availability") == "available" for claim in _claims(envelope, field))
+    return {"website": not facts["website"]["missing"] and not facts["website"].get("registry_only"), "profiles": not facts["profiles"]["missing"], "news": not facts["news"]["missing"],
+            "jobs": not facts["jobs"]["missing"], "events": has("registry_event"), "accounts": not facts["fiscal_year"]["missing"],
+            "related": has("related_website"), "roles": not facts["roles"]["missing"]}
+
+
+AREA_LABELS = {"accounts": "filed accounts", "roles": "registered roles", "events": "register changes", "website": "verified website",
+               "profiles": "social profiles", "news": "dated news", "jobs": "jobs", "related": "sub-unit websites"}
+
+
 def _summary_record(envelope: dict[str, Any]) -> dict[str, Any]:
     facts = {fact["key"]: fact for fact in company_facts(envelope)}
     name = facts["legal_name"]["text"] if not facts["legal_name"]["missing"] else f"Organisation {org_display(envelope['organisation_number'])}"
+    profile = envelope.get("profile") or {}
+    industry = _claim(envelope, "industry")
+    industry_value = (industry or {}).get("value") if (industry or {}).get("availability") == "available" else None
+    code = str((industry_value or {}).get("code") or "")
+    financial_claim = _claim(envelope, "latest_annual_accounts")
+    latest = (financial_claim or {}).get("value") if (financial_claim or {}).get("availability") == "available" else None
+    address = None if facts["business_address"]["missing"] else facts["business_address"]["text"]
+    place = str(profile.get("municipality") or "").title() or (address.rsplit(" ", 1)[-1].title() if address else None)
+    areas = _area_flags(envelope, facts)
+    published = sum(1 for claim in envelope.get("claims") or [] if claim.get("availability") == "available")
     return {
         "org": envelope["organisation_number"], "name": name, "status": _status_key(envelope),
         "industry": None if facts["industry"]["missing"] else facts["industry"]["text"],
-        "address": None if facts["business_address"]["missing"] else facts["business_address"]["text"],
+        "division": f"{code[:2]} {(industry_value or {}).get('description') or ''}".strip() if code[:2].isdigit() and code[:2] != "00" else None,
+        "address": address, "place": place or None,
         "fy": None if facts["fiscal_year"]["missing"] else facts["fiscal_year"]["text"],
         "revenue": None if facts["revenue"]["missing"] else facts["revenue"]["text"],
-        "website": not facts["website"]["missing"], "news": not facts["news"]["missing"], "jobs": not facts["jobs"]["missing"],
+        "revenue_value": (latest or {}).get("revenue") if latest else None,
+        "website": areas["website"], "news": areas["news"], "jobs": areas["jobs"], "areas": areas,
+        "score": sum(areas.values()) * 1000 + published, "published": published,
         "headline": (envelope.get("synthesis") or {}).get("headline"),
         "facts": list(facts.values()),
     }
@@ -238,7 +284,7 @@ header.top{border-bottom:1px solid var(--line);background:var(--card)}
 .brand{font-weight:700;letter-spacing:.01em}.brand a{color:var(--ink);text-decoration:none}
 .meta{color:var(--muted);font-size:13px}
 h1{font-size:clamp(22px,4vw,30px);line-height:1.2;margin:8px 0}h2{font-size:18px;margin:28px 0 10px}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:12px 0}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:12px 0}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px}.stat b{display:block;font-size:20px}
 .controls{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
 .controls input[type=search]{flex:1 1 260px;min-width:0}
@@ -287,7 +333,16 @@ table.evidence td:first-child code{white-space:nowrap}table.evidence td:nth-chil
 .row .lead{grid-column:1/-1;font-size:14px;margin:0}
 .row label{min-height:44px;padding:0 4px}
 input,select,button{min-height:44px}label.chip{min-height:44px}
-@media (pointer:coarse),(max-width:640px){a{display:inline-flex;align-items:center;min-height:44px}summary{padding:11px 0;min-height:44px}.cmp a{display:inline-flex}}
+a{display:inline-flex;align-items:center;min-height:44px}summary{padding:11px 0;min-height:44px}.skip{min-height:44px}
+section.sec{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 16px 12px;margin:16px 0}
+section.sec h2{margin:12px 0 6px}section.sec ul.lines{margin:0;padding-left:18px}section.sec ul.lines li{margin:2px 0}
+section.sec .unknown{color:var(--muted)}
+.check{font-size:13px;white-space:nowrap;text-decoration:none;padding:0 4px}
+.keyfig{display:flex;flex-wrap:wrap;gap:4px 14px;grid-column:1/-1;font-size:13px;min-width:0}.keyfig span{overflow-wrap:anywhere;min-width:0}.keyfig b{font-weight:650}
+.row>*{min-width:0}.stats .stat{min-width:0;overflow-wrap:anywhere}
+.controls select{flex:0 1 220px;min-width:0}
+table.static td,table.static th{font-size:13px}table.static td a{min-height:44px}
+@media (max-width:640px){table.static{min-width:900px}}
 @media (max-width:640px){
  .row{grid-template-columns:1fr}
  table.facts thead{display:none}table.facts tr{display:block;border-bottom:1px solid var(--line);padding:6px 0}table.facts td{display:block;border:0;padding:2px 10px}
@@ -308,17 +363,22 @@ const safe=u=>/^https?:\/\//i.test(String(u||''))?u:null;
 const MAX=3;
 function selected(){try{return JSON.parse(sessionStorage.getItem('sp-compare')||'[]')}catch(e){return []}}
 function store(v){try{sessionStorage.setItem('sp-compare',JSON.stringify(v))}catch(e){}}
-// Index: search, filters, compare tray.
+// Index: search, sort, filters, compare tray (the list is pre-rendered, sorted by most data found; this only re-orders/filters).
 const list=document.getElementById('companies');
 if(list){
   const rows=[...list.querySelectorAll('li[data-org]')],q=document.getElementById('q'),st=document.getElementById('status'),
-        web=document.getElementById('has-website'),news=document.getElementById('has-news'),jobs=document.getElementById('has-jobs'),count=document.getElementById('count'),
-        tray=document.getElementById('tray-names'),go=document.getElementById('compare-go'),clear=document.getElementById('compare-clear');
+        sort=document.getElementById('sort'),place=document.getElementById('place'),ind=document.getElementById('industry'),area=document.getElementById('area'),
+        count=document.getElementById('count'),tray=document.getElementById('tray-names'),go=document.getElementById('compare-go'),clear=document.getElementById('compare-clear');
   let picks=selected().filter(o=>rows.some(r=>r.dataset.org===o));
+  const params=new URLSearchParams(location.search);
+  if(params.get('q'))q.value=params.get('q');if(params.get('area'))area.value=params.get('area');
+  function order(){const k=sort.value;const sorted=[...rows].sort((a,b)=>k==='name'?a.dataset.label.localeCompare(b.dataset.label,'nb'):
+      k==='revenue'?(parseFloat(b.dataset.revenue||'-1e18')-parseFloat(a.dataset.revenue||'-1e18')):(parseFloat(b.dataset.score)-parseFloat(a.dataset.score))||a.dataset.label.localeCompare(b.dataset.label,'nb'));
+    sorted.forEach(r=>list.appendChild(r))}
   function apply(){
     const text=fold(q.value);let shown=0;
-    rows.forEach(r=>{const okText=!text||r.dataset.name.includes(text);
-      const ok=okText&&(!st.value||r.dataset.status===st.value)&&(!web.checked||r.dataset.website==='1')&&(!news.checked||r.dataset.news==='1')&&(!jobs.checked||r.dataset.jobs==='1');
+    rows.forEach(r=>{const ok=(!text||r.dataset.name.includes(text))&&(!st.value||r.dataset.status===st.value)&&(!place.value||r.dataset.place===place.value)
+      &&(!ind.value||r.dataset.division===ind.value)&&(!area.value||(' '+r.dataset.areas+' ').includes(' '+area.value+' '));
       r.hidden=!ok;if(ok)shown++});
     count.textContent=shown+' of '+rows.length+' companies';
   }
@@ -331,11 +391,10 @@ if(list){
     picks=box.checked?[...new Set([...picks,org])].slice(0,MAX):picks.filter(o=>o!==org);renderTray()});
   go.addEventListener('click',()=>{location.href='compare.html?orgs='+picks.join(',')});
   clear.addEventListener('click',()=>{picks=[];renderTray()});
-  [q,st,web,news,jobs].forEach(el=>el.addEventListener(el===q?'input':'change',apply));
-  const initial=new URLSearchParams(location.search).get('q');if(initial)q.value=initial;
-  apply();renderTray();
+  q.addEventListener('input',apply);[st,place,ind,area].forEach(el=>el.addEventListener('change',apply));sort.addEventListener('change',()=>{order();apply()});
+  order();apply();renderTray();
 }
-// Compare view.
+// Compare view: the page is pre-rendered (all companies, key facts); with ?orgs= this adds a side-by-side view on top.
 const cmp=document.getElementById('compare');
 if(cmp){
   const COMPANIES=window.SP_COMPANIES||[],byOrg=Object.fromEntries(COMPANIES.map(c=>[c[0],c[1]])),loaded={};
@@ -343,6 +402,7 @@ if(cmp){
   let orgs=(new URLSearchParams(location.search).get('orgs')||'').split(',').map(digits).filter(o=>byOrg[o]).slice(0,MAX);
   if(!orgs.length)orgs=selected().filter(o=>byOrg[o]).slice(0,MAX);
   const pickers=[...document.querySelectorAll('.pick')];
+  document.getElementById('pickers').hidden=false;
   pickers.forEach((input,i)=>{input.value=orgs[i]?byOrg[orgs[i]]+' — '+orgs[i]:'';
     input.addEventListener('change',()=>{const m=digits(input.value.split('—').pop());const next=pickers.map((p,j)=>j===i?m:orgs[j]).filter(o=>o&&byOrg[o]);
       orgs=[...new Set(next)].slice(0,MAX);store(orgs);history.replaceState(null,'','?orgs='+orgs.join(','));load()})});
@@ -351,10 +411,10 @@ if(cmp){
   function cell(f){if(!f)return '<span class="missing">Not available</span><span class="reason">Not checked for this company</span>';
     const val=f.link&&safe(f.link)?'<a href="'+esc(f.link)+'" target="_blank" rel="noopener noreferrer">'+esc(f.text)+'</a>':esc(f.text);
     const dates=[f.as_of?'as of '+esc(f.as_of):'',f.retrieved?'retrieved '+esc(f.retrieved):''].filter(Boolean).join(' · ');
-    const src=safe(f.src)?'<a href="'+esc(f.src)+'" target="_blank" rel="noopener noreferrer">source ↗</a>':'no source';
-    return '<span class="'+(f.missing?'missing':'')+'">'+val+'</span>'+(f.reason?'<span class="reason">'+esc(f.reason)+'</span>':'')+'<span class="src">'+src+(dates?' · '+dates:'')+(f.ev?' · <code>'+esc(f.ev)+'</code>':'')+'</span>'}
+    const src=safe(f.src)?'<a class="check" href="'+esc(f.src)+'" target="_blank" rel="noopener noreferrer">Check the evidence ↗</a>':'no source';
+    return '<span class="'+(f.missing?'missing':'')+'">'+val+'</span>'+(f.reason?'<span class="reason">'+esc(f.reason)+'</span>':'')+'<span class="src">'+src+(dates?' · '+dates:'')+'</span>'}
   function render(){
-    if(orgs.length<2){cmp.innerHTML='<p class="empty">Choose at least two companies above, or pick them on the <a href="index.html">search page</a>.</p>';return}
+    if(orgs.length<2){cmp.innerHTML='<p class="empty">Choose two or three companies above for a side-by-side view, or use the table below.</p>';return}
     const data=orgs.map(o=>loaded[o]);if(data.some(d=>!d)){cmp.innerHTML='<p class="empty">Loading…</p>';return}
     const keys=[];data.forEach(d=>d.facts.forEach(f=>{if(!keys.some(k=>k[0]===f.key))keys.push([f.key,f.label])}));
     let out='<div class="cmp" style="--n:'+data.length+'"><div class="r h-row"><div class="l">Company</div>'+data.map(d=>'<div class="h"><a href="companies/'+esc(d.org)+'.html">'+esc(d.name)+'</a></div>').join('')+'</div>';
@@ -386,7 +446,8 @@ def _page(title: str, body: str, *, depth: int = 0, scripts: list[str] | None = 
 def _source_html(fact: dict[str, Any]) -> str:
     dates = " · ".join(part for part in (f"as of {fact['as_of']}" if fact.get("as_of") else "",
                                           f"retrieved {fact['retrieved']}" if fact.get("retrieved") else "") if part)
-    source = f'<a href="{esc(fact["src"])}" target="_blank" rel="noopener noreferrer">source ↗</a>' if fact.get("src") else "no source"
+    source = (f'<a class="check" href="{esc(fact["src"])}" target="_blank" rel="noopener noreferrer">Check the evidence ↗</a>'
+              if fact.get("src") else "no source")
     evidence = f' · <a href="#{esc(fact["ev"])}"><code>{esc(fact["ev"])}</code></a>' if fact.get("ev") else ""
     return f'<span class="src">{source}{" · " + esc(dates) if dates else ""}{evidence}</span>'
 
@@ -462,7 +523,7 @@ def fact_text(field: str, value: Any) -> tuple[str, str | None]:
     return json.dumps(value, ensure_ascii=False)[:200], None
 
 
-def facts_table(envelope: dict[str, Any]) -> str:
+def facts_table(envelope: dict[str, Any], nested: bool = False) -> str:
     evidence = _evidence_map(envelope)
     rows = []
     for claim in envelope.get("claims") or []:
@@ -473,8 +534,9 @@ def facts_table(envelope: dict[str, Any]) -> str:
         rows.append(f'<tr><td>{esc(FACT_LABELS.get(claim["field"], claim["field"]))}</td><td>{_value_html(fact)}</td><td>{_source_html(fact)}</td></tr>')
     if not rows:
         return '<p class="empty">No fact-level claims.</p>'
-    return (f'<details><summary>{len(rows)} individual facts, each with its source and date</summary><div class="scroll"><table class="facts">'
-            f'<thead><tr><th>Fact</th><th>Value</th><th>Source and date</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div></details>')
+    table = (f'<div class="scroll"><table class="facts"><thead><tr><th>Fact</th><th>Value</th><th>Source and date</th></tr></thead>'
+             f'<tbody>{"".join(rows)}</tbody></table></div>')
+    return table if nested else f'<details><summary>{len(rows)} individual facts, each with its source and date</summary>{table}</details>'
 
 
 LINK_LABELS = {"official_website": "Website", "external_profile": "Profile", "dated_news": "News", "company_activity": "Article",
@@ -528,59 +590,79 @@ def _host_label(url: str | None) -> str:
 
 
 def sentence_sources(item: dict[str, Any], evidence: dict[str, dict[str, Any]]) -> str:
-    """The source links of one summary sentence, one tap each (external source, then the evidence row)."""
+    """One 'Check the evidence' link opening the exact source of the sentence (a second distinct source, if any, follows),
+    then the evidence ids, which name the rows of the evidence list."""
     links, seen = [], set()
     for evidence_id in item.get("evidence_ids") or []:
         record = evidence.get(evidence_id) or {}
         source = safe_url(record.get("item_url")) or safe_url(record.get("source_url"))
         if source and source not in seen:
             seen.add(source)
-            links.append(f'<a href="{esc(source)}" target="_blank" rel="noopener noreferrer">{esc(_host_label(source))} ↗</a>')
+            label = "Check the evidence ↗" if not links else f"{esc(_host_label(source))} ↗"
+            links.append(f'<a class="check" href="{esc(source)}" target="_blank" rel="noopener noreferrer">{label}</a>')
     ids = ", ".join(esc(eid) for eid in item.get("evidence_ids") or [])
-    return f' <span class="srcs">{" ".join(links[:3])} <span class="ids" title="Evidence ids (see Sources)">[{ids}]</span></span>'
+    return f' <span class="srcs">{" ".join(links[:2])} <span class="ids" title="Evidence ids (see Evidence)">[{ids}]</span></span>'
 
 
-BRIEF_SECTIONS = (("headline", "Buyer fact"), ("why_it_matters", "Why it matters"), ("what_it_does", "What it does"), ("signal", "Signals"),
-                  ("changes", "What changed"), ("unknown", "What’s unknown"), ("financials", "Latest filed figures"),
-                  ("profile", "Registry profile"))
+SECTION_TITLES = {"brief": "Company brief", "financials": "Latest financials", "people": "Who runs it", "work": "Working here",
+                  "activity": "Recent activity"}
+SECTION_EMPTY = {"brief": "No sourced brief could be written.", "financials": "No filed figures.",
+                 "people": "No registered roles or units.", "work": "No headcount or job data.", "activity": "No dated activity."}
+LEGACY_SECTION = {"headline": "brief", "why_it_matters": "brief", "what_it_does": "brief", "signal": "brief", "profile": "people",
+                  "financials": "financials", "changes": "activity", "unknown": "brief"}
 
 
-def brief_html(envelope: dict[str, Any], evidence: dict[str, dict[str, Any]]) -> str:
-    sentences = (envelope.get("synthesis") or {}).get("sentences") or []
-    out = ""
-    for topic, heading in BRIEF_SECTIONS:
-        items = [item for item in sentences if item.get("topic") == topic]
-        if not items:
-            continue
+def section_lines(envelope: dict[str, Any], evidence: dict[str, dict[str, Any]], section: str) -> str:
+    """The summary sentences of one section: the buyer fact as the lead, signals as cards, unknowns last, the rest as lines."""
+    items = [item for item in (envelope.get("synthesis") or {}).get("sentences") or []
+             if (item.get("section") or LEGACY_SECTION.get(item.get("topic"), "brief")) == section]
+    out, lines, cards, unknown = "", [], [], []
+    for item in items:
+        topic = item.get("topic")
         if topic == "headline":
-            out += f'<div><h3>{esc(heading)}</h3><p class="lead">{esc(items[0]["text"])}{sentence_sources(items[0], evidence)}</p></div>'
+            out += f'<h3>Buyer fact</h3><p class="lead">{esc(item["text"])}{sentence_sources(item, evidence)}</p>'
         elif topic == "why_it_matters":
-            text = re.sub(r"^Why it matters(?: \(FY\d{4} → FY\d{4}\))?: ", "", items[0]["text"])
-            out += f'<div><h3>{esc(heading)}</h3><p>{esc(text[0].upper() + text[1:])}{sentence_sources(items[0], evidence)}</p></div>'
+            text = re.sub(r"^Why it matters(?: \(FY\d{4} → FY\d{4}\))?: ", "", item["text"])
+            out += f'<h3>Why it matters</h3><p>{esc(text[0].upper() + text[1:])}{sentence_sources(item, evidence)}</p>'
         elif topic == "signal":
-            cards = "".join(f'<li><b>{esc(item.get("label") or "")}</b>{esc(item["text"].split(": ", 1)[-1])}{sentence_sources(item, evidence)}</li>'
-                            for item in items)
-            out += f'<div><h3>{esc(heading)}</h3><ul class="signals">{cards}</ul></div>'
+            cards.append(f'<li><b>{esc(item.get("label") or "")}</b>{esc(item["text"].split(": ", 1)[-1])}{sentence_sources(item, evidence)}</li>')
+        elif topic == "unknown":
+            unknown.append(f'<li class="unknown">{esc(item["text"])}{sentence_sources(item, evidence)}</li>')
         else:
-            lis = "".join(f'<li>{esc(item["text"])}{sentence_sources(item, evidence)}</li>' for item in items)
-            out += f'<div><h3>{esc(heading)}</h3><ul>{lis}</ul></div>'
-    return out or '<p class="empty">No sourced summary could be written for this company.</p>'
+            lines.append(f'<li>{esc(item["text"])}{sentence_sources(item, evidence)}</li>')
+    heading = {"brief": "What it does", "activity": "What changed"}.get(section, "In short")
+    if lines:
+        out += f'<h3>{heading}</h3><ul class="lines">{"".join(lines)}</ul>'
+    if cards:
+        out += f'<h3>Signals</h3><ul class="signals">{"".join(cards)}</ul>'
+    if unknown:
+        out += f'<h3>What’s unknown</h3><ul class="lines">{"".join(unknown)}</ul>'
+    return out
+
+
+def _facts_rows(facts: list[dict[str, Any]]) -> str:
+    rows = "".join(f'<tr><td>{esc(fact["label"])}</td><td class="{"missing" if fact["missing"] else ""}">{_value_html(fact)}</td>'
+                   f'<td>{_source_html(fact)}</td></tr>' for fact in facts)
+    return (f'<div class="scroll"><table class="facts"><thead><tr><th>Fact</th><th>Value</th><th>Source and date</th></tr></thead>'
+            f'<tbody>{rows}</tbody></table></div>') if rows else ""
 
 
 def company_page(envelope: dict[str, Any], record: dict[str, Any], run: dict[str, Any]) -> str:
+    """The same five sections on every company page, each with its summary lines, its facts and one 'Check the
+    evidence' link per fact; the full fact list and the evidence list are collapsed below them."""
+    from .synthesis import event_line
     org = envelope["organisation_number"]
     evidence = _evidence_map(envelope)
     synthesis = envelope.get("synthesis") or {}
-    summary_html = brief_html(envelope, evidence)
-    fact_rows = "".join(
-        f'<tr><td>{esc(fact["label"])}</td><td class="{"missing" if fact["missing"] else ""}">{_value_html(fact)}</td><td>{_source_html(fact)}</td></tr>'
-        for fact in record["facts"])
+    by_section: dict[str, list[dict[str, Any]]] = {}
+    for fact in record["facts"]:
+        by_section.setdefault(fact.get("section") or "brief", []).append(fact)
 
     financial_claim = _claim(envelope, "latest_annual_accounts")
     records = ((((envelope.get("profile") or {}).get("evidence") or {}).get("financials") or {}).get("value") or {}).get("records") or [] \
         if (financial_claim or {}).get("availability") == "available" else []
     fin_source = _source(envelope, financial_claim, evidence)
-    fin_html = '<p class="empty">No filed annual accounts returned.</p>'
+    fin_html = ""
     if records:
         ordered = sorted(records, key=lambda item: (((item.get("period") or {}).get("tilDato") or ""), item.get("account_type") or ""), reverse=True)
         head = "".join(f"<th>{label}</th>" for label in ("Fiscal year", "Type", "Revenue", "Operating result", "Annual result", "Equity", "Source"))
@@ -592,51 +674,58 @@ def company_page(envelope: dict[str, Any], record: dict[str, Any], run: dict[str
             body += (f'<tr><td>FY{esc(fiscal_year(item))}<span class="src">{esc(period.get("fraDato"))} – {esc(period.get("tilDato"))}</span></td>'
                      f'<td>{"Group" if item.get("account_type") == "KONSERN" else "Company"}</td>{cells}'
                      f'<td>{_source_html({**fin_source, "as_of": _day(period.get("tilDato"))})}</td></tr>')
-        fin_html = f'<div class="scroll"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
+        fin_html = f'<h3>Filed years</h3><div class="scroll"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
+
+    roles = (_claim(envelope, "roles") or {}).get("value") or []
+    roles_html = ""
+    if roles:
+        roles_html = ('<h3>Registered roles</h3><ul class="lines">' + "".join(
+            f"<li>{esc(item.get('role'))}: {esc(_org_name(item.get('name')))}</li>" for item in roles[:20]) + "</ul>"
+            + _source_html(_source(envelope, _claim(envelope, "roles"), evidence)))
 
     news = sorted([claim for claim in _claims(envelope, "dated_news") if claim.get("availability") == "available"],
                   key=lambda claim: claim["value"]["published_at"], reverse=True)
-    if news:
-        news_html = "<ul>" + "".join(
-            f'<li><a href="{esc(safe_url(claim["value"]["url"]) or "")}" target="_blank" rel="noopener noreferrer">{esc(claim["value"]["title"])}</a> '
-            f'— published {esc(claim["value"]["published_at"])}{_source_html(_source(envelope, claim, evidence))}</li>' for claim in news) + "</ul>"
-    else:
-        news_claim = _claim(envelope, "dated_news")
-        news_html = f'<p class="empty">{esc(AVAILABILITY_TEXT.get((news_claim or {}).get("availability") or "not_available", "Not available"))}.</p>'
+    news_html = ('<h3>Dated news from its verified website</h3><ul class="lines">' + "".join(
+        f'<li><a href="{esc(safe_url(claim["value"]["url"]) or "")}" target="_blank" rel="noopener noreferrer">{esc(claim["value"]["title"])}</a> '
+        f'— published {esc(claim["value"]["published_at"])}{_source_html(_source(envelope, claim, evidence))}</li>' for claim in news)
+        + "</ul>") if news else ""
+    events = [claim for claim in _claims(envelope, "registry_event") if claim.get("availability") == "available"]
+    events_html = ""
+    if events:
+        items = "".join(f'<li>{esc(event_line(claim))}{_source_html(_source(envelope, claim, evidence))}</li>' for claim in events)
+        events_html = f'<details><summary>All {len(events)} dated register changes, each with its source</summary><ul class="lines">{items}</ul></details>'
 
-    roles = (_claim(envelope, "roles") or {}).get("value") or []
-    roles_html = "<ul>" + "".join(f"<li>{esc(item.get('role'))}: {esc(_org_name(item.get('name')))}</li>" for item in roles[:20]) + "</ul>" \
-        if roles else '<p class="empty">No registered roles returned.</p>'
-    if roles:
-        roles_html += _source_html(_source(envelope, _claim(envelope, "roles"), evidence))
+    extra = {"brief": f'<h3>Links and confidence</h3>{links_section(envelope)}', "financials": fin_html, "people": roles_html,
+             "work": "", "activity": news_html + events_html}
+    sections = ""
+    for key, title in SECTION_TITLES.items():
+        facts = by_section.get(key, [])
+        content = section_lines(envelope, evidence, key) + (f"<h3>Facts</h3>{_facts_rows(facts)}" if facts else "") + extra[key]
+        sections += (f'<section class="sec" aria-labelledby="{key}"><h2 id="{key}">{esc(title)}</h2>'
+                     f'{content or "<p class=empty>" + esc(SECTION_EMPTY[key]) + "</p>"}</section>')
 
     evidence_rows = "".join(
         f'<tr id="{esc(item["id"])}"><td><code>{esc(item["id"])}</code></td><td>{_link(item.get("source_url"))}'
-        f'{("<span class=src>item: " + esc(item.get("item_url")) + "</span>") if item.get("item_url") else ""}</td>'
+        f'{("<span class=src>item: " + esc(item.get("item_url")) + "</span>") if item.get("item_url") else ""}'
+        f'{("<span class=src>read from: " + esc(item.get("read_from")) + "</span>") if item.get("read_from") else ""}</td>'
         f'<td>{esc(item.get("source_class"))}</td><td>{esc(_day(item.get("retrieved_at")) or "—")}</td>'
         f'<td>{esc(item.get("claim_span") or "")}{("<span class=src>sha256 " + esc(item.get("content_sha256")) + "</span>") if item.get("content_sha256") else ""}</td></tr>'
         for item in envelope.get("evidence") or [])
-
+    fact_count = sum(1 for claim in envelope.get("claims") or [] if claim.get("fact_level") and claim.get("availability") == "available")
     status = record["status"]
     chips = _chip({"active": "Active", "deleted": "Deleted", "adverse": "Bankrupt / liquidation", "unknown": "Status unknown"}[status],
                   {"active": "good", "deleted": "bad", "adverse": "bad"}.get(status, ""))
+    nav = "".join(f'<a href="#{key}">{esc(title)}</a>' for key, title in SECTION_TITLES.items())
     body = (f'<div class="sticky"><div class="wrap"><span class="who">{esc(record["name"])}</span>'
             f'<span class="org">Org. no. {esc(org_display(org))}</span>'
-            f'<nav aria-label="On this page"><a href="#summary">Summary</a><a href="#facts">Facts</a><a href="#evidence">Sources</a>'
-            f'<a href="../index.html">All companies</a></nav></div></div>'
+            f'<nav aria-label="On this page">{nav}<a href="#evidence">Evidence</a><a href="../index.html">All companies</a></nav></div></div>'
             f'<main class="wrap"><h1>{esc(record["name"])}</h1><p class="meta">Org. no. {esc(org_display(org))} · {chips} · run {esc(run.get("run_id"))}, '
             f'completed {esc(_day(run.get("completed_at")))} · <a href="../compare.html?orgs={esc(org)}">Compare with others</a></p>'
-            f'<h2 id="summary">Summary · What changed · Unknowns</h2><section class="summary" aria-labelledby="summary">{summary_html}</section>'
-            f'<h2 id="facts">Facts</h2><div class="scroll"><table class="facts"><thead><tr><th>Fact</th><th>Value</th><th>Source and date</th></tr></thead>'
-            f'<tbody>{fact_rows}</tbody></table></div>'
-            f'<h2>Links and confidence</h2>{links_section(envelope)}'
-            f'<h2>All facts</h2>{facts_table(envelope)}'
-            f'<h2>Filed annual accounts</h2>{fin_html}'
-            f'<h2>Dated news from its verified website</h2>{news_html}'
-            f'<h2>Registered roles</h2>{roles_html}'
-            f'<h2 id="evidence">Sources ({len(envelope.get("evidence") or [])} evidence records)</h2>'
+            f'{sections}<h2 id="evidence">Evidence</h2>'
+            f'<details><summary>All facts ({fact_count}), each with its source and date</summary>{facts_table(envelope, nested=True)}</details>'
+            f'<details><summary>Evidence list ({len(envelope.get("evidence") or [])} records: source, span, hash)</summary>'
             f'<div class="scroll"><table class="evidence"><thead><tr><th>Id</th><th>Source</th><th>Class</th><th>Retrieved</th><th>Span / hash</th></tr></thead>'
-            f'<tbody>{evidence_rows}</tbody></table></div></main>')
+            f'<tbody>{evidence_rows}</tbody></table></div></details></main>')
     return _page(f"{record['name']} — Signalpost Norway", body, depth=1,
                  description=(synthesis.get("headline") or ((synthesis.get("sentences") or [{}])[0].get("text", "")))[:200])
 
@@ -657,61 +746,94 @@ def search_key(name: str, org: str, *more: str | None) -> str:
 
 
 def index_page(records: list[dict[str, Any]], run: dict[str, Any]) -> str:
+    """Search, sort (most data found, name A–Z, revenue), filters (status, municipality, industry, data area) and the
+    key figures per row. The list is pre-rendered in 'most data found' order, so it reads and ranks without JS."""
     total = len(records)
-    stats = [(total, "companies"), (sum(r["website"] for r in records), "verified websites"),
-             (sum(r["news"] for r in records), "with dated news"), (sum(r["jobs"] for r in records), "with jobs"),
-             (sum(bool(r["fy"]) for r in records), "with filed accounts")]
+    found = {area: sum(r["areas"][area] for r in records) for area in AREA_LABELS}
+    stats = [(total, "companies")] + [(found[area], f"with {label}") for area, label in AREA_LABELS.items()]
     stats_html = "".join(f'<div class="stat"><b>{value}</b>{esc(label)}</div>' for value, label in stats)
+    places = sorted({r["place"] for r in records if r.get("place")})
+    divisions = sorted({r["division"] for r in records if r.get("division")})
     rows = []
-    for r in records:
+    for r in sorted(records, key=lambda item: (-item["score"], item["name"].casefold())):
         label = r["name"]
         chips = [_chip({"active": "Active", "deleted": "Deleted", "adverse": "Bankrupt / liquidation", "unknown": "Status unknown"}[r["status"]],
                        {"active": "good", "deleted": "bad", "adverse": "bad"}.get(r["status"], ""))]
-        if r["fy"]:
-            chips.append(_chip(f"{r['fy'].split(' ')[0]} revenue: {r['revenue'] or 'not reported'}"))
-        if r["website"]:
-            chips.append(_chip("Verified website", "good"))
-        if r["news"]:
-            chips.append(_chip("Dated news", "good"))
-        if r["jobs"]:
-            chips.append(_chip("Jobs", "good"))
+        chips += [_chip(AREA_LABELS[area].capitalize(), "good") for area in ("website", "profiles", "news", "jobs", "related", "events") if r["areas"][area]]
+        figures = (f'<span><b>Revenue</b> {esc(r["revenue"]) if r["revenue"] else "not reported"}{" (" + esc(r["fy"].split(" ")[0]) + ")" if r["fy"] else ""}</span>'
+                   f'<span><b>Place</b> {esc(r["place"] or "—")}</span><span><b>Industry</b> {esc(r["industry"] or "—")}</span>'
+                   f'<span><b>Facts</b> {r["published"]}</span>')
         folded = search_key(r["name"], r["org"], r["industry"], r["address"])
+        areas = " ".join(area for area, present in r["areas"].items() if present)
         rows.append(
             f'<li class="row" data-org="{esc(r["org"])}" data-name="{esc(folded)}" data-label="{esc(label)}" data-status="{esc(r["status"])}" '
-            f'data-website="{int(r["website"])}" data-news="{int(r["news"])}" data-jobs="{int(r["jobs"])}">'
+            f'data-website="{int(r["website"])}" data-news="{int(r["news"])}" data-jobs="{int(r["jobs"])}" data-areas="{esc(areas)}" '
+            f'data-place="{esc(r["place"] or "")}" data-division="{esc(r["division"] or "")}" data-score="{r["score"]}" '
+            f'data-revenue="{"" if r["revenue_value"] is None else esc(r["revenue_value"])}">'
             f'<div><a class="name" href="companies/{esc(r["org"])}.html">{esc(label)}</a>'
-            f'<div class="sub">{esc(org_display(r["org"]))}{" · " + esc(r["industry"]) if r["industry"] else ""}{" · " + esc(r["address"]) if r["address"] else ""}</div></div>'
+            f'<div class="sub">{esc(org_display(r["org"]))}{" · " + esc(r["address"]) if r["address"] else ""}</div></div>'
             f'<label><input type="checkbox" aria-label="Compare {esc(label)}"> Compare</label>'
-            f'{"<p class=lead>" + esc(r["headline"]) + "</p>" if r.get("headline") else ""}'
+            f'<div class="keyfig">{figures}</div>'
+            f'{"<p class=lead>" + esc(r["headline"]) + "</p>" if r.get("headline") and not r["headline"].startswith("Revenue ") else ""}'
             f'<div class="chips">{"".join(chips)}</div></li>')
+    options = lambda values: "".join(f'<option value="{esc(value)}">{esc(value)}</option>' for value in values)  # noqa: E731
+    area_options = "".join(f'<option value="{area}">{esc(label.capitalize())} ({found[area]})</option>' for area, label in AREA_LABELS.items())
     body = (f'<main class="wrap"><h1>Norwegian company profiles</h1>'
-            f'<p class="meta">Run {esc(run.get("run_id"))} · completed {esc(run.get("completed_at"))} · every fact links to its source and date.</p>'
-            f'<div class="stats">{stats_html}</div>'
+            f'<p class="meta">Run {esc(run.get("run_id"))} · completed {esc(run.get("completed_at"))} · every fact links to its source and date · '
+            f'<a href="compare.html">Compare all companies</a></p>'
+            f'<h2 class="meta" style="margin:8px 0 0">What this run found</h2><div class="stats">{stats_html}</div>'
             f'<div class="controls" role="search"><input id="q" type="search" placeholder="Search by name or organisation number (spaces, æ/ø/å ignored)" '
             f'aria-label="Search by name or organisation number" autocomplete="off">'
+            f'<select id="sort" aria-label="Sort"><option value="data">Most data found</option><option value="name">Name A–Z</option>'
+            f'<option value="revenue">Revenue (highest first)</option></select>'
+            f'<select id="place" aria-label="Municipality"><option value="">Any municipality</option>{options(places)}</select>'
+            f'<select id="industry" aria-label="Industry"><option value="">Any industry</option>{options(divisions)}</select>'
+            f'<select id="area" aria-label="Data area"><option value="">Any data area</option>{area_options}</select>'
             f'<select id="status" aria-label="Registry status"><option value="">Any status</option><option value="active">Active</option>'
-            f'<option value="adverse">Bankrupt / liquidation</option><option value="deleted">Deleted</option><option value="unknown">Unknown</option></select>'
-            f'<label class="chip"><input id="has-website" type="checkbox"> Verified website</label>'
-            f'<label class="chip"><input id="has-news" type="checkbox"> Dated news</label>'
-            f'<label class="chip"><input id="has-jobs" type="checkbox"> Jobs</label></div>'
-            f'<p class="meta" id="count" aria-live="polite">{total} companies</p>'
+            f'<option value="adverse">Bankrupt / liquidation</option><option value="deleted">Deleted</option><option value="unknown">Unknown</option></select></div>'
+            f'<p class="meta" id="count" aria-live="polite">{total} companies, most data found first</p>'
             f'<ul class="list" id="companies">{"".join(rows)}</ul></main>'
             f'<div class="tray" role="region" aria-label="Compare selection"><span id="tray-names" class="meta">Pick 2–3 companies to compare</span>'
             f'<span><button id="compare-clear" type="button" hidden>Clear</button> <button id="compare-go" class="primary" type="button" disabled>Compare</button></span></div>')
     return _page("Signalpost Norway — company search", body, scripts=["assets/app.js"],
-                 description="Search, compare and verify Norwegian company profiles with sourced facts.")
+                 description="Search, sort, filter and compare Norwegian company profiles with sourced facts.")
+
+
+COMPARE_KEYS = ("fiscal_year", "revenue", "annual_result", "equity", "employees", "business_address", "industry", "website",
+                "profiles", "news", "jobs", "events")
 
 
 def compare_page(records: list[dict[str, Any]]) -> str:
+    """A pre-rendered table of every company's key facts (works without JS; each cell opens its evidence). With JS, picking
+    2–3 companies adds a side-by-side view of all facts on top."""
     options = "".join(f'<option value="{esc(r["name"])} — {esc(r["org"])}">' for r in records)
     pickers = "".join(f'<input class="pick" list="company-options" placeholder="Company {i} — name or org. no." aria-label="Company {i}">' for i in (1, 2, 3))
-    body = (f'<main class="wrap"><p class="meta"><a href="index.html">← Search</a></p><h1>Compare companies</h1>'
-            f'<p class="meta">Side by side, 2–3 companies. Each value links to its source with the date it refers to and the retrieval date.</p>'
-            f'<div class="pickers">{pickers}</div><datalist id="company-options">{options}</datalist>'
-            f'<div id="compare" class="scroll" aria-live="polite"><p class="empty">Loading…</p></div>'
-            f'<noscript><p>The compare view needs JavaScript. Each company page lists the same facts with sources.</p></noscript></main>')
-    return _page("Compare companies — Signalpost Norway", body, scripts=["assets/companies.js", "assets/app.js"],
-                 description="Compare 2–3 Norwegian companies side by side with sourced facts.")
+    labels = {"fiscal_year": "Latest filed year", "revenue": "Revenue", "annual_result": "Annual result", "equity": "Equity",
+              "employees": "Employees", "business_address": "Address", "industry": "Industry", "website": "Website",
+              "profiles": "Social profiles", "news": "Latest news", "jobs": "Hiring", "events": "Register changes"}
+    head = "<th>Company</th>" + "".join(f"<th>{esc(labels[key])}</th>" for key in COMPARE_KEYS)
+    body = ""
+    for r in sorted(records, key=lambda item: (-item["score"], item["name"].casefold())):
+        facts = {fact["key"]: fact for fact in r["facts"]}
+        cells = ""
+        for key in COMPARE_KEYS:
+            fact = facts.get(key)
+            if not fact:
+                cells += '<td class="missing">Not available</td>'
+                continue
+            source = (f' <a class="check" href="{esc(fact["src"])}" target="_blank" rel="noopener noreferrer" '
+                      f'aria-label="Check the evidence: {esc(labels[key])}, {esc(r["name"])}">↗</a>') if fact.get("src") and not fact["missing"] else ""
+            reason = f'<span class="reason">{esc(fact["reason"])}</span>' if fact.get("reason") else ""
+            note = '<span class="reason">Registry record; site not readable at crawl time</span>' if fact.get("registry_only") else ""
+            cells += f'<td class="{"missing" if fact["missing"] else ""}">{esc(fact["text"])}{source}{reason}{note}</td>'
+        body += f'<tr><td><a href="companies/{esc(r["org"])}.html">{esc(r["name"])}</a><span class="src">{esc(org_display(r["org"]))}</span></td>{cells}</tr>'
+    page = (f'<main class="wrap"><p class="meta"><a href="index.html">← Search</a></p><h1>Compare companies</h1>'
+            f'<p class="meta">Every company\'s key facts side by side; ↗ opens the exact source of a value. Missing values say why.</p>'
+            f'<div id="pickers" hidden><h2>Side by side</h2><div class="pickers">{pickers}</div><datalist id="company-options">{options}</datalist>'
+            f'<div id="compare" class="scroll" aria-live="polite"></div></div>'
+            f'<h2>All companies ({len(records)})</h2><div class="scroll"><table class="static"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div></main>')
+    return _page("Compare companies — Signalpost Norway", page, scripts=["assets/companies.js", "assets/app.js"],
+                 description="Compare Norwegian companies side by side with sourced facts.")
 
 
 def _js_payload(value: Any) -> str:
@@ -743,12 +865,13 @@ def build_site(envelopes: list[dict[str, Any]], out_dir: str | Path, run: dict[s
     (out / "assets" / "app.js").write_text(APP_JS.strip() + "\n", encoding="utf-8")
     (out / "assets" / "companies.js").write_text(f"window.SP_COMPANIES={_js_payload([[r['org'], r['name']] for r in ordered])};\n", encoding="utf-8")
     (out / "index.html").write_text(index_page(ordered, run), encoding="utf-8")
-    (out / "compare.html").write_text(compare_page(ordered), encoding="utf-8")
+    (out / "compare.html").write_text(compare_page(records), encoding="utf-8")
     manifest = {
         "run_id": run.get("run_id"), "completed_at": run.get("completed_at"), "companies": len(records),
         "company_pages": len(records), "with_summary": sum(1 for e in envelopes if (e.get("synthesis") or {}).get("sentences")),
         "with_verified_website": sum(r["website"] for r in records), "with_dated_news": sum(r["news"] for r in records),
         "with_jobs": sum(r["jobs"] for r in records),
+        "found": {area: sum(r["areas"][area] for r in records) for area in AREA_LABELS},
         "entry": "index.html", "compare": "compare.html",
     }
     (out / "site-manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

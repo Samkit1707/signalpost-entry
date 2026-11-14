@@ -7,11 +7,12 @@ import time
 PROCESS_START = time.monotonic()
 
 import argparse  # noqa: E402
+import copy  # noqa: E402
 import json  # noqa: E402
 import sys  # noqa: E402
 import threading  # noqa: E402
 from urllib.parse import urlparse  # noqa: E402
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,15 +48,19 @@ from norway_company_agent.evidence import evidence  # noqa: E402
 from norway_company_agent.domain_guess import discover_website  # noqa: E402
 from norway_company_agent.news import MAX_REQUESTS as NEWS_MAX_REQUESTS, fetch_dated_news  # noqa: E402
 from norway_company_agent.site import build_site  # noqa: E402
+from norway_company_agent.registry_changes import fetch_registry_events, skipped_record  # noqa: E402
+from norway_company_agent.domain_filings import decide_registry_website, domain_counts, domain_reasons  # noqa: E402
+from norway_company_agent.subunit_sites import verify_subunit_sites  # noqa: E402
 
 DEFAULT_MODULES = ",".join([
-    "registry", "accounting_obligation", "registry_live", "financials", "roles", "group", "locations",
+    "registry", "accounting_obligation", "registry_live", "financials", "roles", "group", "locations", "registry_events",
     "wikidata_footprint", "website", *ENRICHMENT_MODULES, "dated_news",
 ])
 # Share of --deadline-minutes the bulk download may use; past it the run continues on live registry data.
 BULK_DOWNLOAD_SHARE = 0.3
 LIVE_IDENTITY_FIELDS = ("name", "legal_form", "employees", "bankrupt", "liquidating", "website", "latest_submitted_accounts")
-LOCAL_MODULES = {"registry", "accounting_obligation", "website", "wikidata_footprint", "dated_news", *ENRICHMENT_MODULES}
+LOCAL_MODULES = {"registry", "accounting_obligation", "website", "wikidata_footprint", "dated_news", "registry_events", *ENRICHMENT_MODULES}
+
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -91,6 +96,9 @@ def main() -> None:
     parser.add_argument("--no-domain-guess", action="store_true", help="Disable name-derived .no domain candidates")
     parser.add_argument("--max-requests", type=int, default=0, help="Global outbound request budget (0 = unlimited)")
     parser.add_argument("--deadline-minutes", type=float, default=0.0, help="Stop new network work after this many minutes (0 = none)")
+    parser.add_argument("--company-timeout-seconds", type=float, default=240.0,
+                        help="Hard limit per company and phase (registry, then enrichment); past it the company's unfinished "
+                             "modules are emitted as failed and its late results are discarded")
     parser.add_argument("--site-dir", default="out/site",
                         help="Static site written from this run's envelopes (index, compare view, one page per company); '' disables")
     args = parser.parse_args()
@@ -110,10 +118,14 @@ def main() -> None:
         bulk_path, bulk_report = ensure_bulk(args.bulk, args.bulk_cache, max_age_hours=args.bulk_max_age_hours,
                                              deadline_at=bulk_deadline)
         profiles, registry_metadata = profiles_from_bulk(bulk_path, orgs)
+        filing_started = time.monotonic()
+        filings = domain_counts(bulk_path)  # registered domain -> how many main units file it as their website
+        bulk_report["domain_filings"] = {"domains": len(filings), "seconds": round(time.monotonic() - filing_started, 1)}
     except BulkUnavailable as exc:
         # Every company still gets an envelope; identity basics come from the live registry calls instead.
         bulk_report = {"source": "unavailable", "error": str(exc)[:500], "requests": exc.requests}
         profiles, registry_metadata = profiles_without_snapshot(orgs, str(exc))
+        filings = None  # without the bulk file no registry-only website is attributed (ambiguity cannot be checked)
     annotations = {item["organisation_number"]: item for item in organisation_inputs}
     for profile in profiles:
         for key in ("evaluation_split", "sample_slice"):
@@ -170,19 +182,27 @@ def main() -> None:
                             note=wikidata_report.get("error"))
         return wikidata_source.evidence_for(org, wikidata_index, wikidata_meta)
 
-    def enrich(profile: dict) -> tuple[dict, dict]:
+    LATE_MODULES = [name for name in ("website", "dated_news") if name in requested_modules]
+
+    def not_fetched(profile: dict, modules: list[str]) -> None:
+        note = "budget_exhausted: run request/time budget reached before this company was fetched"
+        for module in modules:
+            profile["evidence"][module] = evidence(module, "not_fetched", "budget_guard", "about:budget", note=note)
+
+    def registry_phase(profile: dict) -> tuple[dict, dict]:
+        """Phase 1, for every company before any enrichment: the official registry calls (the change feed comes last)."""
         org = profile["organisation_number"]
         wiki = wikidata_record(org)
         if wiki is not None:
             profile["evidence"]["wikidata_footprint"] = wiki
+        metrics = []
         if not reserve():
-            note = "budget_exhausted: run request/time budget reached before this company was fetched"
-            for module in [*fetch_modules, *[name for name in ("website", "dated_news") if name in requested_modules]]:
-                profile["evidence"][module] = evidence(module, "not_fetched", "budget_guard", "about:budget", note=note)
-            metrics, website_metrics = [], {"requests": 0, "bytes": 0, "latencies_ms": []}
+            not_fetched(profile, [*fetch_modules, *[name for name in ("registry_events",) if name in requested_modules], *LATE_MODULES])
+            profile["budget_stopped"] = True
         else:
             records, metrics = fetch_official_modules(org, fetch_modules)
             profile["evidence"].update(records)
+            profile["domain_filings"] = domain_reasons(profile, filings)
             live = records.get("registry_live") or {}
             if live.get("status") == "available":
                 live_value = live.get("value") or {}
@@ -192,7 +212,22 @@ def main() -> None:
                     for key in LIVE_IDENTITY_FIELDS:
                         if profile.get(key) is None and live_value.get(key) is not None:
                             profile[key] = live_value[key]
-            website_metrics = {"requests": 0, "bytes": 0, "latencies_ms": []}
+        metric = {"requests": len(metrics), "bytes": sum(item.bytes_received for item in metrics),
+                  "latencies_ms": [item.elapsed_ms for item in metrics]}
+        return profile, metric
+
+    def enrich_phase(profile: dict) -> tuple[dict, dict]:
+        """Phase 2: website, sub-unit sites, news and the derived modules."""
+        org = profile["organisation_number"]
+        wiki = profile["evidence"].get("wikidata_footprint")
+        website_metrics = {"requests": 0, "bytes": 0, "latencies_ms": []}
+        over_time = args.deadline_minutes and (time.monotonic() - clock_start) > args.deadline_minutes * 60
+        if profile.pop("budget_stopped", False) or over_time:
+            if over_time:
+                with budget_lock:
+                    budget["stopped"] = True
+            not_fetched(profile, LATE_MODULES)
+        else:
             if "website" in requested_modules:
                 url = profile.get("website")
                 source_type = "registry_linked_company_website"
@@ -201,6 +236,9 @@ def main() -> None:
                     if candidate:
                         url, source_type = candidate, "wikidata_linked_company_website"
                 website_record, website_metrics = fetch_website(url, source_type=source_type, proof_org=org)
+                if source_type == "registry_linked_company_website" and url:
+                    profile["registry_website_check"] = {"url": normalize_homepage(url), "fetch_status": website_record.get("status"),
+                                                         "fetch_note": website_record.get("note"), "retrieved_at": website_record.get("retrieved_at")}
                 profile["evidence"]["website"] = apply_website_identity_gate(profile, website_record)["website"]
                 apply_wikidata_identity_support(profile, wiki)
                 current = profile["evidence"]["website"]
@@ -241,13 +279,18 @@ def main() -> None:
                                 "identity_status": ((current.get("value") or {}).get("identity_assessment") or {}).get("status")}
                         profile["evidence"]["website"] = accepted
                 quarantine_unowned_site(profile)
+                decide_registry_website(profile, filings)
+                sub_metrics = verify_subunit_sites(profile, fetch_website, filings)
+                for key in ("requests", "bytes"):
+                    website_metrics[key] += sub_metrics[key]
+                website_metrics["latencies_ms"] = website_metrics["latencies_ms"] + sub_metrics["latencies_ms"]
             if "dated_news" in requested_modules:
                 news_record, news_metrics = fetch_dated_news(profile)
                 profile["evidence"]["dated_news"] = news_record
                 for key in ("requests", "bytes"):
                     website_metrics[key] += news_metrics[key]
                 website_metrics["latencies_ms"] = website_metrics["latencies_ms"] + news_metrics["latencies_ms"]
-            settle(len(metrics) + website_metrics["requests"])
+            settle(profile.get("run_metrics_registry", {}).get("requests", 0) + website_metrics["requests"])
         builders = {
             "workforce": lambda: workforce_record(profile),
             "external_profiles": lambda: external_profiles_record(profile, wiki),
@@ -257,13 +300,115 @@ def main() -> None:
         for module, build in builders.items():
             if module in requested_modules:
                 profile["evidence"][module] = build()
-        metric = {
-            "requests": len(metrics) + website_metrics["requests"],
-            "bytes": sum(item.bytes_received for item in metrics) + website_metrics["bytes"],
-            "latencies_ms": [item.elapsed_ms for item in metrics] + website_metrics["latencies_ms"],
-        }
-        profile["run_metrics"] = metric
+        metric = website_metrics
+        registry_metric = profile.pop("run_metrics_registry", {"requests": 0, "bytes": 0, "latencies_ms": []})
+        profile["run_metrics"] = {key: registry_metric[key] + metric[key] for key in ("requests", "bytes", "latencies_ms")}
         return profile, metric
+
+    EVENTS_AFTER_SHARE = 0.5  # the change feed is skipped once half of --deadline-minutes has elapsed
+
+    def events_phase(profile: dict) -> tuple[dict, dict]:
+        """Last, lowest priority: the main unit's change feed. Started only after every company's registry work is done,
+        so it never delays core calls; skipped (not available) once half of the run deadline has passed."""
+        org = profile["organisation_number"]
+        empty = {"requests": 0, "bytes": 0, "latencies_ms": []}
+        if (profile["evidence"].get("registry_events") or {}).get("status") == "not_fetched":
+            return profile, empty  # the run budget stopped this company before any fetch
+        if args.deadline_minutes and (time.monotonic() - clock_start) > args.deadline_minutes * 60 * EVENTS_AFTER_SHARE:
+            profile["evidence"]["registry_events"] = skipped_record(org)
+            with budget_lock:
+                phase_report["events"]["skipped_for_deadline"] += 1
+            return profile, empty
+        live = (profile["evidence"].get("registry_live") or {}).get("value") or {}
+        personal = str(profile.get("legal_form") or live.get("legal_form") or "").upper() == "ENK"
+        record, results_ = fetch_registry_events(org, personal=personal)
+        profile["evidence"]["registry_events"] = record
+        metric = {"requests": len(results_), "bytes": sum(item.bytes_received for item in results_),
+                  "latencies_ms": [item.elapsed_ms for item in results_]}
+        run = profile.get("run_metrics") or {"requests": 0, "bytes": 0, "latencies_ms": []}
+        profile["run_metrics"] = {key: run[key] + metric[key] for key in ("requests", "bytes", "latencies_ms")}
+        return profile, metric
+
+    def timed_out(profile: dict, phase: str, modules: list[str]) -> dict:
+        """The company's own copy, with every module of the phase that it had not finished emitted as failed."""
+        note = (f"company_time_limit: the {phase} phase for this company passed --company-timeout-seconds "
+                f"({args.company_timeout_seconds:.0f} s); late results are discarded")
+        for module in modules:
+            record = profile["evidence"].get(module)
+            if not record or record.get("status") == "not_fetched" or phase != "registry":
+                profile["evidence"][module] = evidence(module, "source_error", "company_time_limit", "about:time-limit", note=note)
+        profile.setdefault("time_limited", []).append(phase)
+        if phase == "enrichment":
+            profile["run_metrics"] = profile.pop("run_metrics_registry", {"requests": 0, "bytes": 0, "latencies_ms": []})
+        return profile
+
+    def run_pipeline(items: list[dict], registry_modules: list[str], enrichment_modules: list[str]) -> None:
+        """Registry work for every company is queued first, in its own pool (it is the only work that calls the
+        Brønnøysund hosts); a company's enrichment is queued in a second pool as soon as its own registry work is done.
+        Each company's registry and enrichment work runs on a copy of its profile with a hard limit per phase: past it
+        the company keeps its row, with that phase's unfinished modules marked failed, and late results are discarded."""
+        started: dict[tuple[str, str], float] = {}
+        phases = {"registry": (registry_phase, registry_modules), "enrichment": (enrich_phase, enrichment_modules),
+                  "events": (events_phase, ["registry_events"])}
+        pools = {name: ThreadPoolExecutor(max_workers=args.workers if name != "events" else 4) for name in phases}
+        futures: dict = {}
+        waiting_for_events: list[dict] = []
+        with_events = "registry_events" in requested_modules
+
+        def submit(name: str, profile: dict) -> None:
+            def wrapped(copy_of_profile: dict) -> tuple[dict, dict]:
+                started[(name, copy_of_profile["organisation_number"])] = time.monotonic()
+                return phases[name][0](copy_of_profile)
+            futures[pools[name].submit(wrapped, copy.deepcopy(profile))] = (name, profile)
+
+        def finish(name: str, profile: dict, metric: dict) -> None:
+            org = profile["organisation_number"]
+            if name == "registry":
+                profile["run_metrics_registry"] = metric
+            phase_report[name]["finished_at_s"] = round(time.monotonic() - pipeline_started, 1)
+            operations["requests"] += metric["requests"]
+            operations["bytes"] += metric["bytes"]
+            operations["latencies_ms"].extend(metric["latencies_ms"])
+            if name == "registry":
+                submit("enrichment", profile)
+            elif name == "enrichment" and with_events:
+                waiting_for_events.append(profile)
+            else:
+                results[org] = profile
+
+        pipeline_started = time.monotonic()
+        for profile in items:
+            submit("registry", profile)
+        written = 0
+        while futures or waiting_for_events:
+            if waiting_for_events and not any(name == "registry" for name, _ in futures.values()):
+                for profile in waiting_for_events:  # every company's registry work is done: the change feeds may start
+                    submit("events", profile)
+                waiting_for_events.clear()
+            if not futures:
+                continue
+            done, _ = wait(list(futures), timeout=1.0, return_when=FIRST_COMPLETED)
+            for future in done:
+                name, original = futures.pop(future)
+                try:
+                    profile, metric = future.result()
+                except Exception as exc:  # noqa: BLE001 - one company's crash never drops its row
+                    profile, metric = timed_out(copy.deepcopy(original), name, phases[name][1]), {"requests": 0, "bytes": 0, "latencies_ms": []}
+                    profile["phase_errors"] = profile.get("phase_errors", []) + [f"{name}: {type(exc).__name__}: {str(exc)[:200]}"]
+                finish(name, profile, metric)
+            now = time.monotonic()
+            for future, (name, original) in list(futures.items()):
+                org = original["organisation_number"]
+                if (name, org) in started and now - started[(name, org)] > args.company_timeout_seconds and not future.done():
+                    futures.pop(future)
+                    future.cancel()
+                    phase_report[name]["timed_out"].append(org)
+                    finish(name, timed_out(copy.deepcopy(original), name, phases[name][1]), {"requests": 0, "bytes": 0, "latencies_ms": []})
+            if len(results) - written >= args.checkpoint_every or (not futures and len(results) != written):
+                written = len(results)
+                write_jsonl(checkpoint_path, [results.get(org) or state[org] for org in orgs if org in results or org in state])
+        for pool in pools.values():
+            pool.shutdown(wait=False, cancel_futures=True)  # threads stuck past the limit finish on their socket timeouts
 
     state: dict[str, dict] = {}
     resumed_profiles = 0
@@ -282,17 +427,15 @@ def main() -> None:
         }
         resumed_profiles = len(state)
     pending_profiles = [profile for profile in profiles if profile["organisation_number"] not in state]
-    with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = {pool.submit(enrich, profile): profile["organisation_number"] for profile in pending_profiles}
-        for index, future in enumerate(as_completed(futures), 1):
-            profile, metric = future.result()
-            state[profile["organisation_number"]] = profile
-            operations["requests"] += metric["requests"]
-            operations["bytes"] += metric["bytes"]
-            operations["latencies_ms"].extend(metric["latencies_ms"])
-            if index % args.checkpoint_every == 0 or index == len(pending_profiles):
-                checkpoint = [state[org] for org in orgs if org in state]
-                write_jsonl(checkpoint_path, checkpoint)
+    results: dict[str, dict] = {}
+    phase_report: dict[str, dict] = {}
+    registry_modules = list(fetch_modules)
+    enrichment_modules = [*LATE_MODULES, *[name for name in ENRICHMENT_MODULES if name in requested_modules]]
+    for name in ("registry", "enrichment", "events"):
+        phase_report[name] = {"companies": len(pending_profiles), "timed_out": [], "finished_at_s": 0.0}
+    phase_report["events"].update({"skipped_for_deadline": 0, "skip_after_minutes": args.deadline_minutes * 0.5 or None})
+    run_pipeline(pending_profiles, registry_modules, enrichment_modules)
+    state.update(results)
 
     completed_at = utc_now()
     ordered_profiles = [state[org] for org in orgs]
@@ -322,6 +465,10 @@ def main() -> None:
         "expected_count": args.expected_count,
         "emitted_envelopes": len(envelopes),
         "resumed_profiles": resumed_profiles,
+        "phases": {**phase_report, "company_timeout_seconds": args.company_timeout_seconds,
+                   "rule": ("registry work for every company is queued first in its own pool; each company's enrichment starts when "
+                            "its registry work is done; the change feed runs last, only after all registry work, and is "
+                            "skipped past half the deadline; a company past the limit keeps its row with failed modules")},
         "profiles_fetched_this_run": len(pending_profiles),
         "modules": requested_modules,
         "registry": registry_metadata,

@@ -224,13 +224,13 @@ def discover_website(profile: dict[str, Any], fetch, gate, *, resolver=resolves,
             trail.append({"candidate": domain, "method": method, "result": "no_dns"})
             continue
         fetches += 1
-        source_type = {"registry_email_domain": "registry_email_domain_candidate",
+        source_type = {"registry_email_domain": "registry_email_domain_candidate", "past_registry_website": "past_registry_website_candidate",
                        "subunit_registry_website": "subunit_registry_website_candidate"}.get(method, "name_derived_domain_candidate")
         # https only: an http:// fallback recovered fetches on the 300 sample but proved no site and doubled p95.
         # A guessed host that resolves but does not answer within PROBE_TIMEOUT is not worth the run's p95
         # (on the smoke batch such hosts sat at the 15 s socket timeout and set p95 at 6-8 s).
         record, fetched = fetch("https://" + host + "/", source_type=source_type, probe=True,
-                                probe_terms=None if method in {"registry_email_domain", "subunit_registry_website"} else terms, timeout=PROBE_TIMEOUT,
+                                probe_terms=None if method in {"registry_email_domain", "subunit_registry_website", "past_registry_website"} else terms, timeout=PROBE_TIMEOUT,
                                 proof_org=str(profile.get("organisation_number") or "") or None)
         spend(fetched)
         gated = gate(profile, record)

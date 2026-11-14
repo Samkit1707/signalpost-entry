@@ -71,7 +71,12 @@ def _clean_record(record: dict[str, Any]) -> dict[str, Any]:
 
 def public_profile(profile: dict[str, Any]) -> dict[str, Any]:
     """A copy of the profile holding only verified, publishable material (see module docstring)."""
-    out = copy.deepcopy({key: item for key, item in profile.items() if key not in {"website_discovery"}})
+    internal = {"website_discovery", "registry_website_check", "domain_filings", "registry_website_ambiguous",
+                "registry_website_unresolved", "subunit_site_checks"}
+    out = copy.deepcopy({key: item for key, item in profile.items() if key not in internal})
+    for event in (((out.get("evidence") or {}).get("registry_events") or {}).get("value") or {}).get("events") or []:
+        event.pop("_raw_new", None)
+    ((out.get("evidence") or {}).get("registry_events") or {}).pop("not_published", None)  # diagnostics file only
     records = out.get("evidence") or {}
     verified = _publishable(profile)
     for module, record in list(records.items()):
@@ -91,14 +96,17 @@ def public_profile(profile: dict[str, Any]) -> dict[str, Any]:
                     "field": "website", "status": "not_found", "source_type": "website_identity_gate",
                     "source_class": "official_registry", "source_url": BRREG_BULK_URL,
                     "retrieved_at": record.get("retrieved_at"), "value": None, "as_of": None,
-                    "note": ("candidate site(s) were checked and none proved it is this company's own "
+                    "note": ("the registry-listed site could not be read at crawl time; its address is published from the "
+                             "Brønnøysund record only, and nothing from the site is used") if profile.get("registry_website_kept") else
+                            ("candidate site(s) were checked and none proved it is this company's own "
                              "(org number, or registry-listed site with full legal name); nothing from them is published")
                     if tried else (record.get("note") or "no website found"),
                     "content_sha256": None, "source_row_key": record.get("source_row_key"), "effective_at": None}
         else:
             records[module] = _clean_record(record)
     if not verified:
-        out["website"] = None  # the registry's website entry did not prove identity: not published
+        # the registry's website entry did not prove identity: not published, unless kept from the registry record
+        out["website"] = (profile.get("registry_website_kept") or {}).get("url")
     trail = (profile.get("website_discovery") or {}).get("candidates") or []
     winner = next((item for item in trail if str(item.get("result") or "").startswith("published")), None)
     if trail:
@@ -109,13 +117,18 @@ def public_profile(profile: dict[str, Any]) -> dict[str, Any]:
 
 
 def subunit_site_split(profile: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Sub-unit registry websites: (kept, withheld). A sub-unit's site is labelled on its location claim only when it is
-    the same registered domain as the company's verified website; every other one is unverified for this company and
-    goes to the diagnostics file, never the envelope."""
+    """Sub-unit registry websites: (kept, withheld). Kept: the same registered domain as the company's verified website
+    (labelled on its location claim), or a domain only that filer uses whose site resolves, stays on that domain and prints
+    the sub-unit's or the parent's org number or exact legal name (subunit_sites), published as the sub-unit's own site
+    (`related_website`, never the company's). Withheld (diagnostics file only): domains filed by more than one company
+    in the bulk entity file, platform or franchise domains (see domain_filings), and sites without that proof."""
+    from .domain_filings import ambiguity
     verified_domain = ""
     if _publishable(profile):
         value = ((profile.get("evidence") or {}).get("website") or {}).get("value") or {}
         verified_domain = (value.get("registered_domain") or _registered(_host(str(value.get("final_url") or "")))).casefold()
+    filings = profile.get("domain_filings") or {}  # registered domain -> why it is ambiguous (None: one filer)
+    checks = profile.get("subunit_site_checks") or {}  # url -> DNS, redirect and on-site proof result (subunit_sites)
     kept, withheld = [], []
     for item in (((profile.get("evidence") or {}).get("locations") or {}).get("value") or {}).get("locations") or []:
         raw = str(item.get("website") or "").strip()
@@ -123,7 +136,19 @@ def subunit_site_split(profile: dict[str, Any]) -> tuple[list[dict[str, Any]], l
             continue
         domain = (_registered(_host(raw)) or _host(raw)).casefold()
         entry = {"organisation_number": item.get("organisation_number"), "name": item.get("name"), "website": raw}
-        (kept if verified_domain and domain == verified_domain else withheld).append(entry)
+        if verified_domain and domain == verified_domain:
+            kept.append({**entry, "relation": "same_as_verified_site"})
+            continue
+        reason = filings[domain] if domain in filings else ambiguity(raw, None)
+        check = checks.get(raw)
+        if not reason and not check:
+            reason = "the site was not checked for the sub-unit's or the parent's org number or legal name"
+        elif not reason and not check.get("ok"):
+            reason = check.get("reason") or "no on-site proof"
+        if reason:
+            withheld.append({**entry, "reason": reason, **({"site_check": check} if check else {})})
+        else:
+            kept.append({**entry, "relation": "subunit_site", "site_proof": check.get("proof"), "site_check": check})
     return kept, withheld
 
 
@@ -131,11 +156,18 @@ _SUBUNIT_SITE_SPAN = re.compile(r'(?:;\s*)?\$\._embedded\.underenheter\[\d+\]\.h
 
 
 def restrict_subunit_websites(profile: dict[str, Any]) -> list[dict[str, Any]]:
-    """Remove, in place, every sub-unit website that is not the company's verified site (value and cited span)."""
-    _, withheld = subunit_site_split(profile)
+    """Remove, in place, every ambiguous sub-unit website (value and cited span); label the kept ones with their relation."""
+    kept, withheld = subunit_site_split(profile)
     drop = {(item["organisation_number"], item["website"]) for item in withheld}
+    relation = {(item["organisation_number"], item["website"]): item for item in kept}
     for item in (((profile.get("evidence") or {}).get("locations") or {}).get("value") or {}).get("locations") or []:
-        if (item.get("organisation_number"), str(item.get("website") or "").strip()) in drop:
+        key = (item.get("organisation_number"), str(item.get("website") or "").strip())
+        if key in relation:
+            item["website_relation"] = relation[key]["relation"]
+            if relation[key].get("site_proof"):
+                item["website_site_proof"] = {**relation[key]["site_proof"],
+                                              "retrieved_at": (relation[key].get("site_check") or {}).get("retrieved_at")}
+        if key in drop:
             item["website"] = None
             item["claim_span"] = _SUBUNIT_SITE_SPAN.sub("", str(item.get("claim_span") or ""))
     return withheld
@@ -161,9 +193,18 @@ def allowed_links(envelope: dict[str, Any]) -> dict[str, set[str]]:
         domain = (website.get("value") or {}).get("registered_domain") or _registered(_host(final))
         if domain:
             hosts.add(domain.casefold())
+        requested = _registered(_host(str((website.get("value") or {}).get("requested_url") or "")))
+        if requested:
+            hosts.add(requested.casefold())  # the address we fetched, which redirected to the verified site
     for claim in envelope.get("claims") or []:
         if claim.get("availability") != "available":
             continue
+        if claim.get("field") in {"official_website", "related_website"}:
+            # a registry-listed site (company's own or a sub-unit's) published from the official record
+            url = claim["value"].get("url") if isinstance(claim.get("value"), dict) else claim.get("value")
+            domain = _registered(_host(str(url or "")))
+            if domain:
+                hosts.add(domain.casefold())
         values = claim.get("value") if isinstance(claim.get("value"), list) else [claim.get("value")]
         for value in values:
             url = value.get("url") if isinstance(value, dict) else None
@@ -184,7 +225,9 @@ def allowed_links(envelope: dict[str, Any]) -> dict[str, set[str]]:
     registry = ((profile.get("evidence") or {}).get("registry") or {}).get("value") or {}
     if isinstance(registry, dict) and registry.get("epostadresse"):
         emails.add(str(registry["epostadresse"]).strip().casefold())
-    return {"hosts": hosts, "profiles": profiles, "emails": emails}
+    # handles of verified profiles (instagram.com/novooi.no): the handle text is not a domain of its own
+    handles = {urllib.parse.unquote(path.rstrip("/").rsplit("/", 1)[-1]).lstrip("@").casefold() for path in profiles}
+    return {"hosts": hosts, "profiles": profiles, "emails": emails, "handles": {item for item in handles if item}}
 
 
 # Norwegian abbreviations that look like domains: "(org.no. 913 365 798)" is "organisation number", not a link.
@@ -197,6 +240,8 @@ def _url_allowed(url: str, allowed: dict[str, set[str]]) -> bool:
     host = _host(url)
     if not host:
         return True
+    if "://" not in url and "/" not in url and url.casefold().removeprefix("@") in allowed.get("handles", set()):
+        return True  # the handle of a verified profile, quoted in its proof
     if any(host == suffix or host.endswith("." + suffix) for suffix in OFFICIAL_HOST_SUFFIXES):
         return True
     social = normalize_social_url(url if "://" in url else "https://" + url)
@@ -326,11 +371,97 @@ def diagnostics_record(profile: dict[str, Any]) -> dict[str, Any]:
                 (record.get("checked") or {}).get("not_published") or []:
             rejected_links.append({"module": module, "url": item.get("url"), "reason": item.get("reason")})
     subunit_sites = subunit_site_split(profile)[1]
+    kept = profile.get("registry_website_kept")
+    ambiguous = profile.get("registry_website_ambiguous") or profile.get("registry_website_unresolved")
     return {"organisation_number": profile.get("organisation_number"), "name": profile.get("name"),
-            "subunit_sites_not_labelled": [{**item, "reason": "not the same domain as the company's verified website"}
-                                           for item in subunit_sites],
+            "subunit_sites_not_published": subunit_sites,
+            "registry_events_not_published": ((profile.get("evidence") or {}).get("registry_events") or {}).get("not_published") or [],
+            "registry_website_kept": kept, "registry_website_not_published": ambiguous,
             "website": {"published": _publishable(profile), "url": value.get("final_url") if _publishable(profile) else None,
                         "source_type": website.get("source_type"),
                         "identity": value.get("identity_assessment")},
             "candidates": (profile.get("website_discovery") or {}).get("candidates") or [],
             "rejected_sites": rejected_sites, "rejected_links": rejected_links}
+
+
+SOCIAL_PLATFORMS = {"facebook", "linkedin", "instagram", "youtube", "x", "tiktok"}
+
+
+def reconcile_profile_claims(envelope: dict[str, Any]) -> int:
+    """The aggregate `external_profiles` / `social_profiles` claims list exactly the per-fact `external_profile` claims
+    that are published (after the link guard), with their evidence. Returns how many aggregate entries were dropped."""
+    claims = envelope.get("claims") or []
+    facts = [claim for claim in claims if claim.get("field") == "external_profile" and claim.get("availability") == "available"
+             and isinstance(claim.get("value"), dict)]
+    by_url = {claim["value"].get("url"): claim for claim in facts}
+    dropped = 0
+    for claim in claims:
+        if claim.get("field") not in {"external_profiles", "social_profiles"} or claim.get("fact_level"):
+            continue
+        social_only = claim["field"] == "social_profiles"
+        wanted = [fact for fact in facts if not social_only or fact["value"].get("platform") in SOCIAL_PLATFORMS]
+        before = {entry.get("url") for entry in claim.get("value") or []} if claim.get("availability") == "available" else set()
+        dropped += len(before - set(by_url))
+        if not wanted:
+            if claim.get("availability") == "available":
+                claim.update({"value": None, "availability": "not_available", "confidence": None, "as_of": None,
+                              "note": "no profile link passed the identity rule and the link guard"})
+                for key in ("confidence_level", "proof"):
+                    claim.pop(key, None)
+            continue
+        levels = [fact.get("confidence_level") for fact in wanted]
+        level = "medium" if "medium" in levels else "high"
+        claim.update({
+            "value": [{"platform": fact["value"].get("platform"), "url": fact["value"].get("url"),
+                       "confidence": fact.get("confidence_level"), "proof": fact.get("proof")} for fact in wanted],
+            "availability": "available", "confidence": max((fact.get("confidence") or 0) for fact in wanted) or None,
+            "evidence_ids": [eid for fact in wanted for eid in fact.get("evidence_ids") or []],
+            "confidence_level": level, "proof": "; ".join(f"{fact['value'].get('url')}: {fact.get('proof')}" for fact in wanted)})
+        claim.pop("note", None)
+    return dropped
+
+
+BRREG = "https://data.brreg.no/enhetsregisteret/api"
+SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
+
+
+def wikidata_page(item: Any) -> str | None:
+    match = re.search(r"(Q\d+)", str(item or ""))
+    return f"https://www.wikidata.org/wiki/{match.group(1)}" if match else None
+
+
+def link_sources(envelope: dict[str, Any]) -> None:
+    """Every source link opens the exact per-company record: registry facts the entity (/enheter/<org>, a sub-unit fact
+    /underenheter/<org>), accounts /regnskapsregisteret/regnskap/<org>, Wikidata facts the item page. The bulk CSV and
+    the bare SPARQL endpoint are never linked: what was read from them is named in `read_from` (no URL) with its hash."""
+    org = str(envelope.get("organisation_number") or "")
+    entity = f"{BRREG}/enheter/{org}"
+    profile = envelope.get("profile") or {}
+    wiki_value = ((profile.get("evidence") or {}).get("wikidata_footprint") or {}).get("value") or {}
+    item_page = wikidata_page(wiki_value.get("wikidata_item"))
+    search = f"https://www.wikidata.org/w/index.php?search=haswbstatement%3AP2333%3D{org}"
+
+    def fix(record: dict[str, Any], key: str = "source_url") -> None:
+        url = str(record.get(key) or "")
+        if url == BRREG_BULK_URL:
+            record[key] = entity
+            record["read_from"] = f"Brønnøysund bulk entity file (daily snapshot), row organisasjonsnummer={org}"
+        elif url.startswith(SPARQL_ENDPOINT):
+            record[key] = item_page or search
+            record["read_from"] = "Wikidata query service, P2333 (Norwegian organisation number) = " + org
+
+    for item in envelope.get("evidence") or []:
+        fix(item)
+    for record in (profile.get("evidence") or {}).values():
+        if isinstance(record, dict):
+            fix(record)
+    # a sub-unit fact opens that sub-unit's own record; the list response it was read from stays named, with its hash
+    evidence = {item.get("id"): item for item in envelope.get("evidence") or []}
+    for claim in envelope.get("claims") or []:
+        if claim.get("field") in {"registered_location", "related_website"} and isinstance(claim.get("value"), dict):
+            sub = re.sub(r"\D", "", str(claim["value"].get("organisation_number") or claim["value"].get("subunit_organisation_number") or ""))
+            for evidence_id in claim.get("evidence_ids") or []:
+                item = evidence.get(evidence_id)
+                if item and len(sub) == 9 and item.get("module") == "locations" and "/underenheter/" not in str(item.get("source_url") or ""):
+                    item["read_from"] = item["source_url"]
+                    item["source_url"] = f"{BRREG}/underenheter/{sub}"

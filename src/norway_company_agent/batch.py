@@ -10,7 +10,8 @@ from .contract import contract_fields
 from .enrichment import quarantine_unowned_site
 from .evidence import evidence, utc_now
 from .official import accounting_obligation_assessment
-from .public import diagnostics_record, guard_urls, public_profile, restrict_subunit_websites, strip_claim_diagnostics  # noqa: F401
+from .public import (diagnostics_record, guard_urls, link_sources, public_profile, reconcile_profile_claims,  # noqa: F401
+                     restrict_subunit_websites, strip_claim_diagnostics)
 from .sampling import iter_bulk
 from .synthesis import build_synthesis
 
@@ -193,9 +194,12 @@ def terminal_envelope(
         **contract,
         "synthesis": synthesis,
     }
+    link_sources(envelope)  # every source link opens the exact per-company record, never the bulk file or the SPARQL endpoint
     removed = guard_urls(envelope)
-    envelope["link_guard"] = {"rule": "only the registry, Wikidata, the verified website and verified profiles are linked",
-                              "removed": len(removed)}
+    reconciled = reconcile_profile_claims(envelope)  # aggregate profile claims list exactly the published per-fact ones
+    envelope["link_guard"] = {"rule": "only the registry, Wikidata, the verified website, registry-listed sites that one "
+                                      "company files, and verified profiles are linked",
+                              "removed": len(removed), "aggregate_profile_entries_dropped": reconciled}
     if guard_log is not None:
         guard_log.extend({"organisation_number": profile["organisation_number"], **item} for item in removed)
     return envelope

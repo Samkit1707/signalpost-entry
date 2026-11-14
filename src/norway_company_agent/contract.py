@@ -38,6 +38,7 @@ SOURCE_CLASS = {
     "official_roles": "official_registry",
     "official_group_structure": "official_registry",
     "official_subunits": "official_registry",
+    "official_registry_updates": "official_registry",
     "wikidata_org_number_match": "open_knowledge_base",
 }
 # Modules whose findings come only from the identity-verified company website.
@@ -302,7 +303,44 @@ def _jobs_claims(record: dict[str, Any]) -> tuple[list[Built], list[dict[str, An
     return [("company_jobs", claim, "")], sources
 
 
+def _events_claims(record: dict[str, Any]) -> list[Built]:
+    """Aggregate of the dated registry change events (one fact-level `registry_event` claim per change)."""
+    events = _row(record).get("events") or []
+    if not events:
+        return [("registry_events", None, "")]
+    newest = events[0]
+    value = {"events": len(events), "newest_date": newest.get("date"), "oldest_date": events[-1].get("date"),
+             "entities": sorted({str(item.get("entity")) for item in events})}
+    return [("registry_events", value, newest.get("claim_span") or "",
+             {"source_url": newest.get("source_url"), "content_sha256": newest.get("content_sha256"),
+              "retrieved_at": newest.get("retrieved_at")})]
+
+
+def registry_website_claim(profile: dict[str, Any], records: dict[str, Any]) -> list[Built] | None:
+    """The registry's own website entry, published from the per-company registry record when the site could not be read
+    at crawl time (failed or blocked) and the domain is filed by this company only. Nothing from the site is used."""
+    kept = profile.get("registry_website_kept")
+    if not kept:
+        return None
+    org = str(profile.get("organisation_number") or "")
+    live = records.get("registry_live") or {}
+    live_site = str((_row(live).get("website") or "")).strip()
+    note = f"site unreachable at crawl time ({kept.get('fetch_note') or kept.get('fetch_status')}); published from the Brønnøysund record only"
+    if live.get("status") == "available" and live_site:
+        span, source = json_span([("$.organisasjonsnummer", org), ("$.hjemmeside", live_site)]), live
+    else:
+        bulk = records.get("registry") or {}
+        raw = _row(bulk).get("hjemmeside")
+        if not raw:
+            return None
+        span, source = csv_span(org, [("hjemmeside", raw)]), bulk
+    return [("official_website", kept["url"], span, {"source_url": source.get("source_url"), "content_sha256": source.get("content_sha256"),
+                                                     "retrieved_at": source.get("retrieved_at"), "span_kind": "field_path",
+                                                     "source_class": "official_registry", "note": note})]
+
+
 SIMPLE: dict[str, Callable[[dict[str, Any]], list[Built]]] = {
+    "registry_events": _events_claims,
     "registry": _registry_claims,
     "registry_live": _registry_live_claims,
     "financials": _financial_claims,
@@ -314,7 +352,7 @@ SIMPLE: dict[str, Callable[[dict[str, Any]], list[Built]]] = {
 }
 MULTI_SOURCE = {"external_profiles": _profiles_claims, "company_activity": _activity_claims, "company_jobs": _jobs_claims}
 FIELD_PATH_MODULES = {"registry", "registry_live", "financials", "roles", "group", "locations", "workforce",
-                      "accounting_obligation", "wikidata_footprint"}
+                      "accounting_obligation", "wikidata_footprint", "registry_events"}
 
 
 def _confidence(module: str, record: dict[str, Any], profile: dict[str, Any], state: str) -> float | None:
@@ -441,6 +479,9 @@ def contract_fields(profile: dict[str, Any], module_states: dict[str, dict[str, 
                 "as_of": _as_of(field, value, record) if claim_state == "available" else None,
                 "evidence_ids": ids,
                 "module": module,
+                # a check this run skipped on purpose (deadline) or stopped (per-company limit) says so on the claim
+                **({"note": record.get("note")} if claim_state != "available" and record.get("source_type") in
+                   {"deadline_guard", "company_time_limit"} and record.get("note") else {}),
             })
 
     ordered = sorted(module_states, key=lambda module: module in SITE_MODULES | {"external_profiles"})  # website claim first
@@ -461,7 +502,13 @@ def contract_fields(profile: dict[str, Any], module_states: dict[str, dict[str, 
             if state == "available" and not identity.get("publishable"):
                 state = "ambiguous"  # a site was found, but exact identity is review/uncertain
             built = _website_claims(record, profile) if state == "available" else [("official_website", None, "")]
-            publish(module, record, state, built, kind)
+            kept = registry_website_claim(profile, records) if built[0][1] is None else None
+            if kept:
+                # registry entry kept: the claim cites the registry record, not the (unreadable) site
+                publish(module, record, "available", kept, "field_path")
+                claims[-1].update({"website_source": "registry_record", "note": kept[0][3]["note"]})
+            else:
+                publish(module, record, state, built, kind)
         elif module == "workforce":
             publish(module, record, state, _workforce_claims(record if state == "available" else {}, records), kind)
         elif module == "registry" and state != "available" and _live_fallback(records):
@@ -516,7 +563,7 @@ def contract_fields(profile: dict[str, Any], module_states: dict[str, dict[str, 
 # Claims whose value is a link or a fact read from the identity-gated site: each gets confidence_level + proof.
 SITE_FACT_FIELDS = {"site_address", "site_phone", "site_email", "site_logo"}
 LINK_FIELDS = {"official_website", "external_profile", "external_profiles", "dated_news", "company_activity", "careers_page",
-               "job_posting", "company_jobs", "group_website"} | SITE_FACT_FIELDS
+               "job_posting", "company_jobs", "group_website", "related_website"} | SITE_FACT_FIELDS
 
 
 def label_link_claims(profile: dict[str, Any], records: dict[str, Any], claims: list[dict[str, Any]],
@@ -554,7 +601,12 @@ def label_link_claims(profile: dict[str, Any], records: dict[str, Any], claims: 
             continue
         value = claim.get("value")
         level, proof = None, None
-        if field == "official_website":
+        if field == "official_website" and claim.get("website_source") == "registry_record":
+            level = "medium"
+            proof = ("listed as the company's website (hjemmeside) in its Brønnøysund record, a domain no other company files; "
+                     "the site could not be read at crawl time, so nothing from it is used")
+            claim["discovery_method"] = "registry_record"
+        elif field == "official_website":
             level, proof = site_level, site_reason
             claim["discovery_method"] = discovery_method(profile)
         elif field == "external_profile":
@@ -584,6 +636,14 @@ def label_link_claims(profile: dict[str, Any], records: dict[str, Any], claims: 
         elif field == "company_jobs":
             levels = [item.get("confidence") for item in [*careers.values(), *postings.values()]]
             level, proof = worst(levels), f"careers pages and JSON-LD JobPosting on the verified site {site_url}"
+        elif field == "related_website":
+            level = "medium"
+            site = (value or {}).get("site_proof") or {}
+            shown = (f"its org number {site.get('value')}" if site.get("kind") == "org_number" else f"its exact legal name “{site.get('value')}”")
+            proof = (f"the Brønnøysund record of sub-unit {(value or {}).get('subunit_organisation_number')} lists this website, "
+                     f"on a domain no other company files; the site resolves, stays on that domain, and {site.get('page_url')} prints "
+                     f"the {site.get('who')}'s {shown.removeprefix('its ')} (page sha256 {str(site.get('content_sha256') or '')[:12]}); "
+                     "it is the sub-unit's site, not proven as the company's own")
         elif field == "group_website":
             level, proof = "medium", "group site: the page quotes this company's group organisation numbers; not this company's own site"
         elif field in SITE_FACT_FIELDS:

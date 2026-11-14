@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+
 import html as html_lib
 import json
 import ipaddress
@@ -314,8 +316,21 @@ def normalize_social_url(url: str) -> dict[str, str] | None:
     return {"platform": platform, "url": f"https://{canonical_host}/{'/'.join(parts)}"}
 
 
+NON_TEXT_TAGS = ("script", "style", "template")
+
+
+def visible_soup(soup: BeautifulSoup) -> BeautifulSoup:
+    """A copy without script, style and template elements: only text the page prints can prove identity (an org
+    number inside a tracking script's URL is not printed on the site)."""
+    clean = copy.copy(soup)
+    for node in clean.find_all(NON_TEXT_TAGS):
+        node.decompose()
+    return clean
+
+
 def identity_excerpt(soup: BeautifulSoup) -> str:
-    """Footer/address/legal text where Norwegian sites print 'Org.nr' (trafilatura drops footers)."""
+    """Footer/address/legal text where Norwegian sites print 'Org.nr' (trafilatura drops footers); printed text only."""
+    soup = visible_soup(soup)
     nodes = soup.select('footer, address, [itemprop="legalName"], [itemprop="address"], [itemprop="telephone"], [itemprop="email"], [itemprop="vatID"], [itemprop="taxID"]')
     parts = [node.get_text(" ", strip=True) for node in nodes]
     for node in soup.find_all(string=__import__("re").compile(r"org\.?\s*(?:nr|nummer|no)|foretaksregisteret|mva", __import__("re").I)):
@@ -479,7 +494,7 @@ def sitemap_proof_urls(base_url: str, timeout: float) -> tuple[list[str], int]:
 def org_number_lines(soup: BeautifulSoup) -> list[str]:
     """Visible text lines that carry a 9-digit (3-3-3) number: where a page prints an organisation number."""
     lines = []
-    for line in soup.get_text("\n", strip=True).splitlines():
+    for line in visible_soup(soup).get_text("\n", strip=True).splitlines():
         line = " ".join(line.split())
         if ORG_LINE.search(line) and line not in lines:
             lines.append(line[:300])

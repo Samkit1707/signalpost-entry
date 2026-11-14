@@ -78,7 +78,7 @@ uv run python scripts/run_competition_batch.py \
 uv run --with pytest pytest -q
 ```
 
-The original starter archive was clean-room verified by Builderr on August 24, 2026 (104 tests). This entry has **196 tests and 5 subtests passing offline**, and has been run live on a 100-company smoke batch (`submission/smoke-report.json`) and a 998-company rehearsal.
+The original starter archive was clean-room verified by Builderr on August 24, 2026 (104 tests). This entry has **261 tests and 5 subtests passing offline**, and has been run live on a 100-company smoke batch (`submission/smoke-report.json`) and a 1,100-company rehearsal (`submission/run-1100-report.json`).
 
 Increase `--count` and `--expected-count` together for a larger local test. The 100-row smoke test above is practice only; Builderr supplies the companies for every official run.
 
@@ -169,6 +169,16 @@ No data files need to be present: when `--bulk` is omitted (or points to a missi
 official Brønnøysund bulk entity CSV (gzip, NLOD 2.0) once into `cache/brreg-enheter.csv.gz`, counts it as one
 request, and records it under `registry_download` in the report. Organisation numbers absent from the snapshot
 (e.g. deleted since the batch was drawn) still get an envelope with registry state `not_found`.
+
+The run has three stages. The core registry calls (registry, accounts, roles, group, sub-units) for every company are
+queued first, in their own pool. Each company's enrichment (website, sub-unit sites, news) is queued in a second pool
+as soon as its own registry work is done, so the two overlap on different hosts. The change feed comes last: it starts
+only when every company's core registry work is done, so it never takes a Brønnøysund connection from core work, and
+it is skipped (`not_available`, "skipped to protect the run deadline") once half of `--deadline-minutes` has elapsed.
+Each company has a hard limit per stage
+(`--company-timeout-seconds`, default 240): past it, that company's unfinished modules are emitted as `failed`
+(`company_time_limit`), its late results are discarded, and its row is still written. The report lists the companies
+per stage under `phases` (with `events.skipped_for_deadline`).
 
 `--deadline-minutes` counts from process start, so the download is inside the limit. The download may use at
 most 30% of it; if the link is slower than that, the run continues without the snapshot (registry
@@ -371,17 +381,40 @@ ATS postings: Webcruiter, Jobbnorge, Teamtailor, FINN, …) become `job_posting`
 FY2024 (Brønnøysund accounts)"); distress status, result, hiring, news, headcount or founding date when revenue is not
 filed. The registry identity follows. `synthesis.headline` holds it.
 
-**Sectioned summary and site.** Each company page opens with a sticky header (name, org. no.) and one block,
-"Summary · What changed · Unknowns": the buyer fact, one line on why the year-on-year change matters (from the two
-cited filed years only), what it does (register sentence plus the verified site's own
-description, quoted), 2–3 labelled signals from sourced numbers ("Negative equity in FY2025", "Profitable two years
-running"), what changed (filed-year revenue/result/equity with direction and %, register status, dated news and job
-postings), and what is unknown with the reason ("No verified website: the registry lists none, and none of the 3
-candidate domains read printed the org number"). Every sentence shows its source links (one tap) and evidence ids.
-The index search ignores spaces, punctuation and æ/ø/å spelling (Bærum = baerum = barum; 930 856 916 = 930856916) and
-filters on website, news and jobs; compare cells for missing values say "Not available" with the reason. Layout is
-checked at 390 px (no horizontal page scroll, tap targets ≥ 44 px); a skip link, one h1 per page and focus outlines are
-built in, and company pages and the index read without JavaScript.
+**Company pages and site.** Every company page has the same five sections — Company brief, Latest financials, Who runs
+it, Working here, Recent activity — each with its summary lines, its facts and one "Check the evidence" link per fact
+that opens the exact source (the per-company Brønnøysund record, the accounts record, the Wikidata item page, or the
+verified site's page). The brief opens with the buyer fact and one line on why the year-on-year change matters; each
+figure appears once (Latest financials adds operating margin and equity ratio); What changed combines the filed years
+with dated registry change events; each missing family gets one short sourced line in its section. The full fact list
+and the evidence list are collapsed below. The index sorts by most data found (default, pre-rendered), name A–Z or
+revenue, filters by municipality, industry, data area and status, shows revenue, place and industry per row, and its
+stats strip names what the run found. The compare page is pre-rendered (every company's key facts, each linked to its
+evidence) and reads without JavaScript; with JavaScript, 2–3 companies can be put side by side. Search ignores spaces,
+punctuation and æ/ø/å spelling. Link targets are at least 44 px on every screen size; pages are checked at 390 px (no
+horizontal scroll) and work from `file://` and hosted.
+
+**Registry changes, registry-listed and sub-unit websites.**
+- `registry_events` (`registry_changes.py`): one Brønnøysund update feed per company, `/oppdateringer/enheter`
+  filtered by `organisasjonsnummer` with `includeChanges=true` (the newest page too when there are more than 100
+  entries), through the 2-per-host cap with each connection waiting at least 0.6 s between requests, fetched last (see
+  the run stages above). Each stated change becomes a dated `registry_event` claim (date, type, field, old → new; old
+  only when the feed stated it): registered (`Ny`), deleted/removed, or an `Endring` that names a changed field.
+  Updates without change details and `Ukjent` go to the diagnostics file. The date is the feed timestamp's own date as
+  written. Website and e-mail values are not published.
+- A registry website that could not be read at crawl time (timeout, HTTP error, blocked) is published from the
+  registry record ("site unreachable at crawl time", medium confidence), and nothing from the site is used — only if its
+  domain still resolves in DNS (NXDOMAIN or no address: a domain that may have lapsed goes to the diagnostics file as
+  `registry_website_not_published`) and is not ambiguous: filed as the website of more than one main unit in the bulk
+  entity file (a domain → filer count is built from the bulk file in about 12 s, `domain_filings.py`) or a known platform
+  or chain domain.
+- A sub-unit's registered website is published as `related_website`, labelled as that sub-unit's site, never the
+  company's own, only when its domain is unambiguous, resolves in DNS, does not redirect to another domain, and a page on
+  it prints the sub-unit's or the parent's org number or the exact legal name of either (`subunit_sites.py`; the page,
+  its hash and what it prints are in the claim's `site_proof`). Everything else goes to the diagnostics file.
+- Source links never point at the bulk CSV or the SPARQL endpoint; `read_from` names the response a span was read from.
+- Link guard: the handle of a verified profile (`instagram.com/novooi.no`) is not read as a domain, and the aggregate
+  profile claims list exactly the per-profile claims that are published.
 
 Hand-check page for 100 never-run companies: `submission/audit-v6.html` (`scripts/build_audit_v6.py`), 25/25 links
 checked correct by the owner.
@@ -426,8 +459,9 @@ envelope carries only verified material.
   separate `careers_page` claim with `open_postings`.
 - **Sub-unit websites** (`official.normalize_locations`, `domain_guess.subunit_registry_domains`): a sub-unit's registry
   `hjemmeside` is tried as a candidate for the parent and published only if it prints the parent's exact org number. It is
-  labelled on the sub-unit's `registered_location` claim only when it is the same domain as the company's verified website;
-  any other sub-unit site goes to the diagnostics file (`subunit_sites_not_labelled`), never the envelope.
+  labelled on the sub-unit's `registered_location` claim when it is the same domain as the company's website; otherwise it
+  is published as the sub-unit's own site (`related_website`) only with the on-site proof described below, and the
+  others go to the diagnostics file (`subunit_sites_not_published`, with the reason), never the envelope.
 - **Social profiles**: links in the body of the verified site's own contact/about pages count too (`contact_page`), under
   the same handle-match rules and vendor blocklist.
 

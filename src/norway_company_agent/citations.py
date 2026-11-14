@@ -118,6 +118,13 @@ def expected(field: str, value: Any, organisation_number: str = "", legal_name: 
     elif field == "roles":
         need["tokens"] = [token for role in value or [] for token in _text_terms(" ".join(role.get("name"))
                                                                               if isinstance(role.get("name"), list) else role.get("name"))]
+    elif field == "related_website":
+        need["digits"] = [item.get("subunit_organisation_number")]
+        need["tokens"] = [token for token in _tokens(urllib.parse.urlparse(str(item.get("url"))).hostname) if token != "www"]
+    elif field == "registry_event":
+        need["digits"] = [item.get("organisation_number")]
+        field = str(item.get("field") or "").split(".")[0]
+        need["tokens"] = _tokens(field) if field and item.get("entity") != "roles" else []  # role events carry dates only
     elif field == "registered_location":
         need["digits"] = [item.get("organisation_number")]
     elif field == "registered_locations":

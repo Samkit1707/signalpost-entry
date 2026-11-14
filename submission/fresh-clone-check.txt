@@ -1,11 +1,11 @@
-Fresh-clone check, 2026-11-14, uv 0.12.23 (46b84fd0b 2026-10-03 x86_64-apple-darwin)
-Checked commit f0006cf below; the pushed commit has the identical tree plus the submission/ record files.
-commit f0006cfbf368073d043ec5ec4454dec381f67efd
-files_tracked 333
+Fresh-clone check, 2026-11-15, uv 0.12.23 (46b84fd0b 2026-10-03 x86_64-apple-darwin)
+Checked commit 5965163 below; the pushed commit has the identical tree plus this file.
+commit 596516387bb96ec579e02a4ba929ae93e460888d
+files_tracked 352
 uv_sync_exit 0
-247 passed, 5 subtests passed in 62.04s (0:01:02)
-replay_exit 0 (2 expected changes found, 0 false)
+263 passed, 5 subtests passed in 32.02s
+replay_exit 0
 official_command_help_exit 0
 lockfile_unchanged yes
 live_5_exit 0
-live_5 (official command, --bulk from local snapshot): validation passed True | 56 requests | runtime 79.4 s | 184 published claims, 0 / 0 / 0 problems | site ok | summaries 5
+live_5 (official command, --bulk from local snapshot): validation passed True | 98 requests | runtime 84.8 s | 274 published claims, 0 / 0 / 0 problems | site ok | summaries 5

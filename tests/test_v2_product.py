@@ -111,7 +111,8 @@ def test_latest_financials_use_newest_filed_year_and_company_accounts():
     assert latest["value"]["period"]["tilDato"] == "2025-12-31" and latest["value"]["account_type"] == "SELSKAP"
     assert latest["as_of"] == "2025-12-31"
     text = " ".join(sentences(env, "financials"))
-    assert "FY2025" in text and "NOK 2,025,000" in text and "999" not in text
+    assert "FY2025" in text and "999" not in env["synthesis"]["narrative"]
+    assert env["synthesis"]["headline"] == "Revenue NOK 2.0m in FY2025, flat on FY2024 (Brønnøysund accounts)."  # company accounts, not group
     assert env["synthesis"]["latest_fiscal_year"] == "2025"
     change = " ".join(sentences(env, "changes"))
     assert "FY2024 → FY2025" in change  # trend from the two newest filed years
@@ -123,7 +124,7 @@ def test_no_trend_with_one_filed_year_and_nulls_are_never_zero():
     assert "revenue not reported" in text and "annual result not reported" in text
     assert "NOK 0" not in text
     assert not re.search(r"\b(rose|fell|grew|growth|increase|decrease)\b", text)
-    assert any("Only one filed year (FY2025)" in s for s in sentences(env, "unknown"))
+    assert any("FY2025 is the only filed year" in s for s in sentences(env, "unknown"))
     facts = {fact["key"]: fact for fact in company_facts(env)}
     assert facts["revenue"]["missing"] and "0" not in facts["revenue"]["text"]
 
@@ -131,7 +132,7 @@ def test_no_trend_with_one_filed_year_and_nulls_are_never_zero():
 def test_no_trend_when_previous_year_lacks_the_figure():
     env = envelope(make_profile(3, records=[account(2024, revenue=None, annual_result=None, equity=None), account(2025)]))
     assert all("rose" not in s and "fell" not in s for s in sentences(env, "changes"))
-    assert any("No financial trend is stated" in s for s in sentences(env, "unknown"))
+    assert not any(s.startswith(("Revenue", "Annual result", "Equity")) for s in sentences(env, "changes"))
 
 
 def test_every_sentence_has_existing_evidence_ids_and_covers_the_four_topics():
@@ -325,11 +326,11 @@ def check_site(out: Path, envelopes: list[dict]) -> None:
         page = (out / "companies" / f"{env['organisation_number']}.html").read_text()
         assert "<script>alert(1)</script>" not in page and 'href="javascript:' not in page
         assert "None" not in re.sub(r"<[^>]+>", " ", page) and "nan" not in page.split("<body>")[1].split()
-        assert 'class="summary"' in page and "ev-registry-1" in page
+        assert 'class="sec"' in page and "ev-registry-1" in page
         rows = re.findall(r"<tr><td>[^<]+</td><td[^>]*>.*?</td><td>(.*?)</td></tr>", page.split("<tbody>")[1].split("</tbody>")[0])
         # v6: the hostile javascript: site (index 8) is dropped by the link guard together with its evidence
         hostile = env["organisation_number"].endswith("08")
-        assert rows and all(("source ↗" in row and ("retrieved" in row or "as of" in row)) or (hostile and "no source" in row) for row in rows)
+        assert rows and all(("Check the evidence ↗" in row and ("retrieved" in row or "as of" in row)) or (hostile and "no source" in row) for row in rows)
         data = (out / "data" / f"{env['organisation_number']}.js").read_text()
         payload = json.loads(data[data.index(",{") + 1:data.rindex(");")])
         assert all((fact["src"] and (fact["retrieved"] or fact["as_of"])) or hostile for fact in payload["facts"])
