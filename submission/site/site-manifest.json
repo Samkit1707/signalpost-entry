@@ -1,11 +1,12 @@
 {
-  "run_id": "smoke-100-coverage2",
-  "completed_at": "2026-11-13T21:11:40.327244Z",
+  "run_id": "smoke-final",
+  "completed_at": "2026-11-14T11:54:20.222675Z",
   "companies": 100,
   "company_pages": 100,
   "with_summary": 100,
   "with_verified_website": 6,
   "with_dated_news": 1,
+  "with_jobs": 0,
   "entry": "index.html",
   "compare": "compare.html"
 }

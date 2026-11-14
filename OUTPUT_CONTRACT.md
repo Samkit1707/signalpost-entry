@@ -76,3 +76,15 @@ is `not_available` with a note. `external_profiles` and `dated_news` claims may 
 (`[{url, reason, …}]`, candidates that failed the rule; never a value). New field `social_profiles`: the
 `external_profiles` value restricted to social platforms, each entry `{platform, url, confidence, proof}`, same evidence.
 Synthesis topics add `why_it_matters`; method `template_from_claims_v2`.
+
+Summary sections (method `template_from_claims_sections`): sentence topics are `headline` (the buyer fact, first),
+`why_it_matters`,
+`what_it_does` (one register sentence: legal form, place, registered activity, NACE; plus the verified site's own
+meta/og description, quoted and attributed), `financials` (full latest figures), `changes` (filed-year revenue, annual
+result and equity with direction and %, each year's figure claim cited; register status; dated news and job postings with
+dates), `signal` (2–3 labelled observations from sourced numbers, sentence key `label`), `unknown` (one sentence per
+missing family with the reason, sentence key `family`: `website`, `news`, `jobs`, `profiles`, `employees`, `roles`,
+`financials`, `financial_trend`, `registry_history`) and `profile` (founding, roles, sub-units, profiles).
+`why_it_matters` (topic and key) stays one plain line on what the year-on-year change means, built only from the two
+cited filed years. `synthesis.signals` lists the signal sentences as `{label, text, evidence_ids}`.
+The website reason counts candidate domains checked but never names a rejected one.

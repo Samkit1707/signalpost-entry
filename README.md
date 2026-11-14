@@ -17,13 +17,13 @@ The public universe contains 411,160 eligible companies. Run the starter on 100 
 
 ## First run: try one saved example
 
-Requires Python 3.12+. Open a terminal inside this extracted folder.
+Requires Python 3.12+ and `uv`. Open a terminal inside this extracted folder.
 
 Before downloading company data or running a full crawl, try the bundled public
 sample. It uses saved responses: no API key, registry download or live web requests.
 
 ```bash
-python3 scripts/run_refresh_replay.py \
+uv run python scripts/run_refresh_replay.py \
   --manifest tests/fixtures/refresh-snapshots.json \
   --output out/refresh-demo.json
 ```
@@ -46,6 +46,9 @@ The manifest selector can create a local test batch of any size. Use 100 rows fo
 uv sync
 curl -L 'https://builderr.ai/signalpost-company-universe-2025.jsonl.gz' -o signalpost-universe.jsonl.gz
 # The Brønnøysund bulk registry is downloaded automatically into cache/ on the first run (reused for 24 h).
+# The download always has a time limit (30% of --deadline-minutes, counted from process start, and at most
+# --bulk-max-download-minutes, default 10). If it fails or runs out of time, an older cached snapshot is used, and
+# with no cached file each company's identity comes from the live registry. The run never waits on the download.
 
 uv run python select_entry_batch.py \
   --universe signalpost-universe.jsonl.gz \
@@ -367,6 +370,18 @@ ATS postings: Webcruiter, Jobbnorge, Teamtailor, FINN, …) become `job_posting`
 **Summary.** The first sentence is one buyer-relevant fact with its source ("Revenue NOK 17.4m in FY2025, down 3% from
 FY2024 (Brønnøysund accounts)"); distress status, result, hiring, news, headcount or founding date when revenue is not
 filed. The registry identity follows. `synthesis.headline` holds it.
+
+**Sectioned summary and site.** Each company page opens with a sticky header (name, org. no.) and one block,
+"Summary · What changed · Unknowns": the buyer fact, one line on why the year-on-year change matters (from the two
+cited filed years only), what it does (register sentence plus the verified site's own
+description, quoted), 2–3 labelled signals from sourced numbers ("Negative equity in FY2025", "Profitable two years
+running"), what changed (filed-year revenue/result/equity with direction and %, register status, dated news and job
+postings), and what is unknown with the reason ("No verified website: the registry lists none, and none of the 3
+candidate domains read printed the org number"). Every sentence shows its source links (one tap) and evidence ids.
+The index search ignores spaces, punctuation and æ/ø/å spelling (Bærum = baerum = barum; 930 856 916 = 930856916) and
+filters on website, news and jobs; compare cells for missing values say "Not available" with the reason. Layout is
+checked at 390 px (no horizontal page scroll, tap targets ≥ 44 px); a skip link, one h1 per page and focus outlines are
+built in, and company pages and the index read without JavaScript.
 
 Hand-check page for 100 never-run companies: `submission/audit-v6.html` (`scripts/build_audit_v6.py`), 25/25 links
 checked correct by the owner.

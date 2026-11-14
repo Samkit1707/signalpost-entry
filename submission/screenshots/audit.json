@@ -1,0 +1,140 @@
+{
+  "desktop-index": {
+    "title": "Signalpost Norway — company search",
+    "h1": 1,
+    "hscroll": false,
+    "scrollWidth": 1280,
+    "width": 1280,
+    "smallTargets": 101,
+    "smallExamples": [
+      "A:Signalpost Norway 140x18",
+      "A:A-SEAFOOD AS 113x18",
+      "A:AAS ELEKTRONIKK AS 163x18",
+      "A:ABC BOLIG & EIENDOM AS 193x18",
+      "A:AIOTA AS 69x18",
+      "A:ALEXANDER OLSEN HOLDING AS 242x18",
+      "A:ANDREASSEN LEGETJENESTE AS 243x18",
+      "A:ANGEL HOLDING AS 148x18"
+    ],
+    "overflowing": [],
+    "imgsWithoutAlt": 0
+  },
+  "mobile-index": {
+    "title": "Signalpost Norway — company search",
+    "h1": 1,
+    "hscroll": false,
+    "scrollWidth": 390,
+    "width": 390,
+    "smallTargets": 0,
+    "smallExamples": [],
+    "overflowing": [],
+    "imgsWithoutAlt": 0
+  },
+  "desktop-rich": {
+    "title": "MUSIKK I INNLANDET AS — Signalpost Norway",
+    "h1": 1,
+    "hscroll": false,
+    "scrollWidth": 1280,
+    "width": 1280,
+    "smallTargets": 274,
+    "smallExamples": [
+      "A:Signalpost Norway 140x18",
+      "A:Compare with others 126x16",
+      "A:data.brreg.no ↗ 103x19",
+      "A:data.brreg.no ↗ 97x19",
+      "A:musikkinnlandet.no ↗ 130x19",
+      "A:source ↗ 51x15",
+      "A:ev-registry-1 94x15",
+      "A:ev-registry-2 94x15"
+    ],
+    "overflowing": [],
+    "imgsWithoutAlt": 0
+  },
+  "mobile-rich": {
+    "title": "MUSIKK I INNLANDET AS — Signalpost Norway",
+    "h1": 1,
+    "hscroll": false,
+    "scrollWidth": 390,
+    "width": 390,
+    "smallTargets": 0,
+    "smallExamples": [],
+    "overflowing": [],
+    "imgsWithoutAlt": 0
+  },
+  "desktop-sparse": {
+    "title": "B FRAKT AS — Signalpost Norway",
+    "h1": 1,
+    "hscroll": false,
+    "scrollWidth": 1280,
+    "width": 1280,
+    "smallTargets": 126,
+    "smallExamples": [
+      "A:Signalpost Norway 140x18",
+      "A:Compare with others 126x16",
+      "A:data.brreg.no ↗ 103x19",
+      "A:data.brreg.no ↗ 97x19",
+      "A:source ↗ 51x15",
+      "A:ev-registry-1 94x15",
+      "A:ev-registry-2 94x15",
+      "A:ev-registry-3 94x15"
+    ],
+    "overflowing": [],
+    "imgsWithoutAlt": 0
+  },
+  "mobile-sparse": {
+    "title": "B FRAKT AS — Signalpost Norway",
+    "h1": 1,
+    "hscroll": false,
+    "scrollWidth": 390,
+    "width": 390,
+    "smallTargets": 0,
+    "smallExamples": [],
+    "overflowing": [],
+    "imgsWithoutAlt": 0
+  },
+  "desktop-compare": {
+    "title": "Compare companies — Signalpost Norway",
+    "h1": 1,
+    "hscroll": false,
+    "scrollWidth": 1280,
+    "width": 1280,
+    "smallTargets": 67,
+    "smallExamples": [
+      "A:Signalpost Norway 140x18",
+      "A:← Search 57x16",
+      "A:MUSIKK I INNLANDET AS 182x18",
+      "A:BASE HOME AS 113x18",
+      "A:B FRAKT AS 87x18",
+      "A:source ↗ 51x15",
+      "A:https://musikkinnlandet.no/ 186x18",
+      "A:Kronikk: Ansvarleg kulturpolit 296x41"
+    ],
+    "overflowing": [],
+    "imgsWithoutAlt": 0
+  },
+  "mobile-compare": {
+    "title": "Compare companies — Signalpost Norway",
+    "h1": 1,
+    "hscroll": false,
+    "scrollWidth": 390,
+    "width": 390,
+    "smallTargets": 0,
+    "smallExamples": [],
+    "overflowing": [],
+    "imgsWithoutAlt": 0
+  },
+  "search": {
+    "930 856 916": "1 of 100 companies",
+    "fjellglod": "1 of 100 companies",
+    "fjellgloed": "1 of 100 companies",
+    "FJELLGLØD": "1 of 100 companies",
+    "vikoren": "1 of 100 companies",
+    "zzzz-nothing": "0 of 100 companies"
+  },
+  "filterJobs": "0 of 100 companies",
+  "noJsCompany": {
+    "sentences": 19,
+    "facts": 72
+  },
+  "noJsIndex": 100
+}

@@ -233,3 +233,48 @@ def test_runner_without_bulk_flag_downloads_and_counts_one_request(tmp_path, mon
     assert report["operations"]["requests"] == 1
     assert report["registry"]["absent_from_snapshot"] == ["999999999"]
     assert report["validation"]["passed"] and report["emitted_envelopes"] == 2
+
+
+def test_failed_download_falls_back_to_an_older_cached_snapshot(tmp_path):
+    cache = tmp_path / "cache" / "b.gz"
+    cache.parent.mkdir()
+    cache.write_bytes(bulk_bytes(ROWS))
+    old = time.time() - 30 * 3600
+    import os
+    os.utime(cache, (old, old))
+    calls: list = []
+    path, report = registry_bulk.ensure_bulk(None, cache, sleep=lambda s: None,
+                                             opener=fake_opener([(b"<html>error</html>", None)], calls))
+    assert path == cache and report["source"] == "stale_cache" and report["age_hours"] >= 30
+    assert len(calls) == 3 and report["requests"] == 3 and len(report["download_errors"]) == 3
+    assert cache.read_bytes() == bulk_bytes(ROWS)  # the good snapshot was never overwritten by a failed transfer
+
+
+def test_slow_download_with_a_stale_cache_stops_at_the_budget_and_uses_the_cache(tmp_path):
+    cache = tmp_path / "slow.gz"
+    cache.write_bytes(bulk_bytes(ROWS))
+    import os
+    os.utime(cache, (time.time() - 48 * 3600,) * 2)
+    started = time.monotonic()
+    path, report = registry_bulk.ensure_bulk(None, cache, sleep=lambda s: None, deadline_at=time.monotonic() + 0.3,
+                                             opener=lambda request, timeout=None: SlowResponse(bulk_bytes(ROWS) * 50))
+    assert time.monotonic() - started < 2.0 and report["source"] == "stale_cache" and path == cache
+
+
+def test_runner_always_bounds_the_download_even_without_a_deadline(tmp_path, monkeypatch):
+    runner = _runner("runner_bound")
+    seen: dict = {}
+
+    def fake(supplied, cache, **kw):
+        seen.update(kw)
+        raise registry_bulk.BulkUnavailable("no network", 0)
+
+    monkeypatch.setattr(runner, "ensure_bulk", fake)
+    monkeypatch.setattr(runner, "fetch_official_modules", lambda org, modules: (
+        {m: evidence(m, "not_found", "official", "https://data.brreg.no/", note="offline test") for m in modules}, []))
+    monkeypatch.setattr(runner, "fetch_website", lambda url, source_type=None, **_: (
+        evidence("website", "not_found", source_type, "https://data.brreg.no/", note="No valid registry website URL"),
+        {"requests": 0, "bytes": 0, "latencies_ms": []}))
+    report, envelopes = _run(runner, tmp_path, monkeypatch, "--bulk-max-download-minutes", "0.01")
+    assert seen["deadline_at"] is not None and seen["deadline_at"] - runner.PROCESS_START <= 0.01 * 60 + 0.001
+    assert report["registry_download"]["source"] == "unavailable" and len(envelopes) == 2

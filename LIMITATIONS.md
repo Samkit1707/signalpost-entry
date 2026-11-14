@@ -13,6 +13,8 @@
 - The synthesis is template-based from the envelope's own claims. It states no trend without two filed years of the
   same account type that both report the figure, and it does not interpret beyond the sources.
 - The compare view needs JavaScript; company pages and the index list are plain HTML.
+- The official run reads the current register only (no earlier snapshot), so registry changes over time (roles,
+  address, status) are listed as unknown; the register's employee count is one value, so no headcount change is stated.
 - v6: every website not listed in the registry (e-mail domain, Wikidata P856, name variants) publishes only on the
   printed organisation number; many real sites that show only the name stay unpublished by design. Registry e-mail domains are often an accountant's
   or property manager's and are rejected by the same rule.

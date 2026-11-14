@@ -114,7 +114,7 @@ def test_latest_financials_use_newest_filed_year_and_company_accounts():
     assert "FY2025" in text and "NOK 2,025,000" in text and "999" not in text
     assert env["synthesis"]["latest_fiscal_year"] == "2025"
     change = " ".join(sentences(env, "changes"))
-    assert "FY2024 to" in change and "FY2025" in change  # trend from the two newest filed years
+    assert "FY2024 → FY2025" in change  # trend from the two newest filed years
 
 
 def test_no_trend_with_one_filed_year_and_nulls_are_never_zero():
@@ -129,7 +129,7 @@ def test_no_trend_with_one_filed_year_and_nulls_are_never_zero():
 
 
 def test_no_trend_when_previous_year_lacks_the_figure():
-    env = envelope(make_profile(3, records=[account(2024, revenue=None, annual_result=None), account(2025)]))
+    env = envelope(make_profile(3, records=[account(2024, revenue=None, annual_result=None, equity=None), account(2025)]))
     assert all("rose" not in s and "fell" not in s for s in sentences(env, "changes"))
     assert any("No financial trend is stated" in s for s in sentences(env, "unknown"))
 

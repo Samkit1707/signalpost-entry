@@ -25,6 +25,19 @@ sub-unit sites stay in the diagnostics file. News now needs a news/blog section 
 BlogPosting at a root-level slug): on the smoke batch 9 items are kept and 8 root-level posts with only a generic Article
 type drop.
 
+**Summary sections, site UX and mobile fixes, registry download fallback (14 Nov).** Presentation only: identity rules,
+recall and the published links are unchanged (the same 18 links on the smoke batch as the run before). The smoke files,
+`site/`, `tests.txt` and `fresh-clone-check.txt` above are now from this update: smoke 100/100, validation passed, 1,203
+requests, p50 258 ms, p95 4,241 ms, 199 s, 3,794 published claims, 0 citation, state or site-ownership problems; 100/100
+envelopes have a summary. Each summary opens with the buyer fact, then one line on why the year-on-year change matters
+(two cited filed years only), what it does, 2–3 labelled signals from sourced numbers, what changed (with direction and
+%), and what is unknown with the reason; every sentence carries evidence ids and a source link.
+`screenshots/`: index, a rich company (MUSIKK I INNLANDET AS), a sparse company (B FRAKT AS) and the compare view at
+desktop width and at 390 px; `screenshots/audit.json` is the headless-Chrome check: no horizontal page scroll, no tap
+target under 44 px at 390 px, one h1 and a title per page, search finds "930 856 916", "fjellglod", "fjellgloed" and
+"FJELLGLØD", and company pages and all 100 index rows read with JavaScript off. The registry bulk download now always has
+a time limit and falls back to an older cached snapshot, then the live registry (offline tests in `tests/test_registry_bulk.py`).
+
 The v5 evidence below is kept for reference (its smoke files and site were replaced by v6's).
 
 ## v5 evidence (2 Nov)

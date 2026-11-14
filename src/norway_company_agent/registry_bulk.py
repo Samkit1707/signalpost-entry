@@ -74,7 +74,9 @@ def ensure_bulk(
     """Return (snapshot path, report). Uses the supplied file, a fresh cached copy, or downloads one.
 
     ``deadline_at`` (time.monotonic) bounds the whole download, so a slow link cannot eat the run's time
-    limit; past it, BulkUnavailable is raised and the caller continues without the snapshot.
+    limit. When every attempt fails or the budget runs out, an older cached snapshot is used if one exists
+    (report source ``stale_cache``); otherwise BulkUnavailable is raised and the caller continues with the live
+    registry per company.
     """
     if supplied and Path(supplied).is_file():
         return Path(supplied), {"source": "supplied", "path": str(supplied), "requests": 0}
@@ -103,4 +105,12 @@ def ensure_bulk(
             errors.append(f"{type(exc).__name__}: {str(exc)[:160]}")
             if attempt < attempts:
                 sleep(5 * attempt)
+    if cache.is_file():
+        # An older complete snapshot beats none: a cached file only ever exists after a full, verified transfer
+        # (downloads land in .part and are renamed when complete). Identity checks are unchanged; per-company live
+        # registry calls still report current status.
+        age_hours = round((time.time() - cache.stat().st_mtime) / 3600, 1)
+        print(f"Bulk download failed; using the cached snapshot from {age_hours} h ago ({cache})", file=sys.stderr, flush=True)
+        return cache, {"source": "stale_cache", "path": str(cache), "url": BULK_URL, "requests": used, "age_hours": age_hours,
+                       "download_errors": errors, "elapsed_ms": int((time.monotonic() - started) * 1000), **note}
     raise BulkUnavailable(f"Could not download the Brønnøysund bulk registry from {BULK_URL}: {errors}", used)

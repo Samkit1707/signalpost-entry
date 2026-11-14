@@ -74,6 +74,8 @@ def main() -> None:
                         help="Brreg bulk entity snapshot (gzip CSV). If omitted or missing, it is downloaded once into --bulk-cache")
     parser.add_argument("--bulk-cache", default="cache/brreg-enheter.csv.gz", help="Where a downloaded bulk snapshot is kept")
     parser.add_argument("--bulk-max-age-hours", type=float, default=24.0, help="Reuse a cached download younger than this")
+    parser.add_argument("--bulk-max-download-minutes", type=float, default=10.0,
+                        help="Overall limit on the bulk download (all attempts); then an older cached snapshot or the live registry is used")
     parser.add_argument("--output", required=True, help="Terminal envelope JSONL")
     parser.add_argument("--profiles-output", required=True)
     parser.add_argument("--report", required=True)
@@ -99,7 +101,11 @@ def main() -> None:
     orgs = [item["organisation_number"] for item in organisation_inputs]
     if len(orgs) != args.expected_count:
         raise SystemExit(f"Expected {args.expected_count} organisations, received {len(orgs)}")
-    bulk_deadline = clock_start + args.deadline_minutes * 60 * BULK_DOWNLOAD_SHARE if args.deadline_minutes else None
+    # The download always has a time limit: its share of --deadline-minutes (counted from process start), and never
+    # more than --bulk-max-download-minutes; then the cached snapshot, then the live registry, take over.
+    bulk_deadline = clock_start + args.bulk_max_download_minutes * 60
+    if args.deadline_minutes:
+        bulk_deadline = min(bulk_deadline, clock_start + args.deadline_minutes * 60 * BULK_DOWNLOAD_SHARE)
     try:
         bulk_path, bulk_report = ensure_bulk(args.bulk, args.bulk_cache, max_age_hours=args.bulk_max_age_hours,
                                              deadline_at=bulk_deadline)

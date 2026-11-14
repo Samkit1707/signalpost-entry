@@ -1,7 +1,7 @@
 {
-  "run_id": "smoke-100-coverage2",
-  "started_at": "2026-11-13T21:08:55.568774Z",
-  "completed_at": "2026-11-13T21:11:40.327244Z",
+  "run_id": "smoke-final",
+  "started_at": "2026-11-14T11:51:05.539612Z",
+  "completed_at": "2026-11-14T11:54:20.222675Z",
   "expected_count": 100,
   "emitted_envelopes": 100,
   "resumed_profiles": 0,
@@ -23,25 +23,26 @@
     "dated_news"
   ],
   "registry": {
-    "registry_snapshot_sha256": "6f664c1a042cede28001c52659f25e02d9ceb8a3a4b54b20b527300824c26d74",
-    "registry_rows_scanned": 1174285,
+    "registry_snapshot_sha256": "d4d02e6d354274e7bfd00ee0f81da3751304dde901abc1513c5374922f4bc34c",
+    "registry_rows_scanned": 1176902,
     "requested": 100,
     "selected": 100,
     "absent_from_snapshot": []
   },
   "registry_download": {
-    "source": "supplied",
+    "source": "cache",
     "path": "cache/brreg-enheter.csv.gz",
-    "requests": 0
+    "requests": 0,
+    "url": "https://data.brreg.no/enhetsregisteret/api/enheter/lastned/csv"
   },
   "operations": {
-    "requests": 1220,
-    "bytes": 51243345,
-    "p50_ms": 273,
-    "p95_ms": 3596,
-    "requests_per_company": 12.2,
-    "projected_requests_for_1000": 12200,
-    "runtime_ms": 168338
+    "requests": 1203,
+    "bytes": 49694376,
+    "p50_ms": 258,
+    "p95_ms": 4241,
+    "requests_per_company": 12.03,
+    "projected_requests_for_1000": 12030,
+    "runtime_ms": 198988
   },
   "budget": {
     "max_requests": null,
@@ -66,7 +67,7 @@
     "group": 9,
     "locations": 74,
     "wikidata_footprint": 1,
-    "website": 10,
+    "website": 9,
     "workforce": 10,
     "external_profiles": 2,
     "company_activity": 0,
@@ -131,7 +132,7 @@
     "candidates_not_published": {}
   },
   "retries": {
-    "website_pages_retried_once": 11,
+    "website_pages_retried_once": 13,
     "rule": "one retry on HTTP 429/503 (Retry-After <= 10 s) or a timeout"
   },
   "link_guard": {
@@ -150,17 +151,17 @@
       {
         "organisation_number": "914561302",
         "path": "profile.evidence.company_activity.source_url",
-        "text": "https://www.studiox.no/"
+        "text": "https://www.appelx.no/"
       },
       {
         "organisation_number": "914561302",
         "path": "profile.evidence.company_jobs.source_url",
-        "text": "https://www.studiox.no/"
+        "text": "https://www.appelx.no/"
       },
       {
         "organisation_number": "914561302",
-        "path": "evidence[12].source_url",
-        "text": "https://www.studiox.no/"
+        "path": "evidence[12].claim_span",
+        "text": "www.appelx.no"
       },
       {
         "organisation_number": "999288448",
@@ -238,23 +239,24 @@
         "text": "novooi.no"
       }
     ],
-    "diagnostics_file": "out/c2-final/smoke/envelopes.diagnostics.jsonl"
+    "diagnostics_file": "out/final-smoke/envelopes.diagnostics.jsonl"
   },
   "site": {
     "status": "ok",
-    "path": "out/c2-final/smoke/site/index.html",
-    "run_id": "smoke-100-coverage2",
-    "completed_at": "2026-11-13T21:11:40.327244Z",
+    "path": "out/site/index.html",
+    "run_id": "smoke-final",
+    "completed_at": "2026-11-14T11:54:20.222675Z",
     "companies": 100,
     "company_pages": 100,
     "with_summary": 100,
     "with_verified_website": 6,
     "with_dated_news": 1,
+    "with_jobs": 0,
     "entry": "index.html",
     "compare": "compare.html"
   },
   "synthesis": {
     "envelopes_with_summary": 100,
-    "sentences": 1099
+    "sentences": 1836
   }
 }

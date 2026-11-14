@@ -91,10 +91,27 @@ def _org_name(value: Any) -> str:
     return str(value or "")
 
 
+FACT_FAMILY = {"website": "website", "news": "news", "jobs": "jobs", "profiles": "profiles", "employees": "employees",
+               "roles": "roles", "fiscal_year": "financials", "revenue": "financials", "operating_result": "financials",
+               "annual_result": "financials", "equity": "financials", "previous_revenue": "financial_trend"}
+
+
+def unknown_reasons(envelope: dict[str, Any]) -> dict[str, str]:
+    """family -> why it is missing, from the synthesis 'unknown' sentences (text after the label)."""
+    reasons: dict[str, str] = {}
+    for item in (envelope.get("synthesis") or {}).get("sentences") or []:
+        if item.get("topic") == "unknown" and item.get("family"):
+            text = item["text"].split(": ", 1)[-1]
+            reasons.setdefault(item["family"], text[0].upper() + text[1:])
+    return reasons
+
+
 def company_facts(envelope: dict[str, Any]) -> list[dict[str, Any]]:
-    """The fixed fact rows shown on company pages and in the compare view, each with source and dates."""
+    """The fixed fact rows shown on company pages and in the compare view, each with source and dates.
+    A missing fact says "Not available" and why (the reason the summary gives for that family)."""
     evidence = _evidence_map(envelope)
     facts = []
+    reasons = unknown_reasons(envelope)
 
     def value(field: str) -> Any:
         claim = _claim(envelope, field)
@@ -172,6 +189,12 @@ def company_facts(envelope: dict[str, Any]) -> list[dict[str, Any]]:
     add("group", "Corporate group", "group_structure", f"{len(group)} related entit{'y' if len(group) == 1 else 'ies'}" if group else None)
     locations = value("registered_locations") or []
     add("locations", "Registered sub-units", "registered_locations", f"{len(locations)}" if locations else None)
+    for fact in facts:
+        family = FACT_FAMILY.get(fact["key"])
+        if fact["missing"] and family in reasons and not (family == "employees" and fact["key"] != "employees"):
+            fact["reason"] = reasons[family]
+            if fact["key"] in {"website", "news", "jobs", "profiles", "employees", "roles"}:
+                fact["text"] = "Not available"
     return facts
 
 
@@ -196,7 +219,8 @@ def _summary_record(envelope: dict[str, Any]) -> dict[str, Any]:
         "address": None if facts["business_address"]["missing"] else facts["business_address"]["text"],
         "fy": None if facts["fiscal_year"]["missing"] else facts["fiscal_year"]["text"],
         "revenue": None if facts["revenue"]["missing"] else facts["revenue"]["text"],
-        "website": not facts["website"]["missing"], "news": not facts["news"]["missing"],
+        "website": not facts["website"]["missing"], "news": not facts["news"]["missing"], "jobs": not facts["jobs"]["missing"],
+        "headline": (envelope.get("synthesis") or {}).get("headline"),
         "facts": list(facts.values()),
     }
 
@@ -242,7 +266,28 @@ td.missing,.missing{color:var(--muted);font-style:italic}
 .cmp .r>div{padding:8px 10px;overflow-wrap:anywhere}.cmp .h{font-weight:650}.cmp .l{color:var(--muted);font-size:13px}
 .pickers{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin:12px 0}
 code{font-size:12px;overflow-wrap:anywhere}
-details summary{cursor:pointer}
+details summary{cursor:pointer}summary:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.skip{position:absolute;left:-9999px;top:0;background:var(--card);padding:10px 14px;z-index:5}.skip:focus{left:8px;top:8px}
+.sticky{position:sticky;top:0;z-index:3;background:var(--card);border-bottom:1px solid var(--line)}
+.sticky .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;padding-top:6px;padding-bottom:6px}
+.sticky .who{font-weight:700;min-width:0;overflow-wrap:anywhere}.sticky .org{color:var(--muted);font-size:13px;white-space:nowrap}
+.sticky nav{display:flex;flex-wrap:wrap;gap:2px 10px;margin-left:auto}.sticky nav a{display:inline-flex;align-items:center;min-height:44px;padding:0 4px}
+h2{scroll-margin-top:72px}tr[id]{scroll-margin-top:72px}
+.summary{display:grid;gap:12px}.summary h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:4px 0 2px}
+.summary .lead{font-size:17px;font-weight:650;margin:2px 0}
+.summary ul{margin:0;padding-left:18px}.summary li{margin:4px 0}
+.signals{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0!important}
+.signals li{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--paper);flex:1 1 220px;margin:0!important}
+.signals b{display:block}
+.srcs{display:inline;font-size:12px;color:var(--muted)}.srcs a{text-decoration:none;white-space:nowrap;padding:2px 4px}
+.ids{font-family:ui-monospace,monospace;font-size:11px;overflow-wrap:anywhere}
+table.evidence td:first-child code{white-space:nowrap}table.evidence td:nth-child(2){min-width:240px;max-width:420px}
+@media (max-width:640px){table.evidence{min-width:640px}}
+.reason{display:block;font-size:13px;color:var(--muted);font-style:normal}
+.row .lead{grid-column:1/-1;font-size:14px;margin:0}
+.row label{min-height:44px;padding:0 4px}
+input,select,button{min-height:44px}label.chip{min-height:44px}
+@media (pointer:coarse),(max-width:640px){a{display:inline-flex;align-items:center;min-height:44px}summary{padding:11px 0;min-height:44px}.cmp a{display:inline-flex}}
 @media (max-width:640px){
  .row{grid-template-columns:1fr}
  table.facts thead{display:none}table.facts tr{display:block;border-bottom:1px solid var(--line);padding:6px 0}table.facts td{display:block;border:0;padding:2px 10px}
@@ -255,7 +300,8 @@ details summary{cursor:pointer}
 
 APP_JS = r"""
 (function(){
-const norm=v=>String(v??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+// fold: lower case, æ→ae ø→o å→a, accents and everything but letters/digits dropped (so spaces never matter)
+const fold=v=>String(v??'').toLowerCase().replace(/æ/g,'ae').replace(/ø/g,'o').replace(/å/g,'a').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
 const digits=v=>String(v??'').replace(/\D/g,'');
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safe=u=>/^https?:\/\//i.test(String(u||''))?u:null;
@@ -266,13 +312,13 @@ function store(v){try{sessionStorage.setItem('sp-compare',JSON.stringify(v))}cat
 const list=document.getElementById('companies');
 if(list){
   const rows=[...list.querySelectorAll('li[data-org]')],q=document.getElementById('q'),st=document.getElementById('status'),
-        web=document.getElementById('has-website'),news=document.getElementById('has-news'),count=document.getElementById('count'),
+        web=document.getElementById('has-website'),news=document.getElementById('has-news'),jobs=document.getElementById('has-jobs'),count=document.getElementById('count'),
         tray=document.getElementById('tray-names'),go=document.getElementById('compare-go'),clear=document.getElementById('compare-clear');
   let picks=selected().filter(o=>rows.some(r=>r.dataset.org===o));
   function apply(){
-    const text=norm(q.value.trim()),num=digits(q.value);let shown=0;
-    rows.forEach(r=>{const okText=!text||r.dataset.name.includes(text)||(num.length>=3&&r.dataset.org.includes(num));
-      const ok=okText&&(!st.value||r.dataset.status===st.value)&&(!web.checked||r.dataset.website==='1')&&(!news.checked||r.dataset.news==='1');
+    const text=fold(q.value);let shown=0;
+    rows.forEach(r=>{const okText=!text||r.dataset.name.includes(text);
+      const ok=okText&&(!st.value||r.dataset.status===st.value)&&(!web.checked||r.dataset.website==='1')&&(!news.checked||r.dataset.news==='1')&&(!jobs.checked||r.dataset.jobs==='1');
       r.hidden=!ok;if(ok)shown++});
     count.textContent=shown+' of '+rows.length+' companies';
   }
@@ -285,7 +331,7 @@ if(list){
     picks=box.checked?[...new Set([...picks,org])].slice(0,MAX):picks.filter(o=>o!==org);renderTray()});
   go.addEventListener('click',()=>{location.href='compare.html?orgs='+picks.join(',')});
   clear.addEventListener('click',()=>{picks=[];renderTray()});
-  [q,st,web,news].forEach(el=>el.addEventListener(el===q?'input':'change',apply));
+  [q,st,web,news,jobs].forEach(el=>el.addEventListener(el===q?'input':'change',apply));
   const initial=new URLSearchParams(location.search).get('q');if(initial)q.value=initial;
   apply();renderTray();
 }
@@ -302,11 +348,11 @@ if(cmp){
       orgs=[...new Set(next)].slice(0,MAX);store(orgs);history.replaceState(null,'','?orgs='+orgs.join(','));load()})});
   function load(){orgs.forEach(o=>{if(loaded[o])return;const s=document.createElement('script');s.src='data/'+o+'.js';
     s.onerror=()=>{loaded[o]={org:o,name:byOrg[o],facts:[],error:true};render()};document.head.appendChild(s)});render()}
-  function cell(f){if(!f)return '<span class="missing">Not available</span>';
+  function cell(f){if(!f)return '<span class="missing">Not available</span><span class="reason">Not checked for this company</span>';
     const val=f.link&&safe(f.link)?'<a href="'+esc(f.link)+'" target="_blank" rel="noopener noreferrer">'+esc(f.text)+'</a>':esc(f.text);
     const dates=[f.as_of?'as of '+esc(f.as_of):'',f.retrieved?'retrieved '+esc(f.retrieved):''].filter(Boolean).join(' · ');
     const src=safe(f.src)?'<a href="'+esc(f.src)+'" target="_blank" rel="noopener noreferrer">source ↗</a>':'no source';
-    return '<span class="'+(f.missing?'missing':'')+'">'+val+'</span><span class="src">'+src+(dates?' · '+dates:'')+(f.ev?' · <code>'+esc(f.ev)+'</code>':'')+'</span>'}
+    return '<span class="'+(f.missing?'missing':'')+'">'+val+'</span>'+(f.reason?'<span class="reason">'+esc(f.reason)+'</span>':'')+'<span class="src">'+src+(dates?' · '+dates:'')+(f.ev?' · <code>'+esc(f.ev)+'</code>':'')+'</span>'}
   function render(){
     if(orgs.length<2){cmp.innerHTML='<p class="empty">Choose at least two companies above, or pick them on the <a href="index.html">search page</a>.</p>';return}
     const data=orgs.map(o=>loaded[o]);if(data.some(d=>!d)){cmp.innerHTML='<p class="empty">Loading…</p>';return}
@@ -331,10 +377,10 @@ def _page(title: str, body: str, *, depth: int = 0, scripts: list[str] | None = 
     tags = "".join(f'<script src="{prefix}{src}"></script>' for src in scripts or [])
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>{esc(title)}</title><meta name="description" content="{esc(description)}"><link rel="icon" href="data:,">'
-            f'<link rel="stylesheet" href="{prefix}assets/style.css"></head><body>'
+            f'<link rel="stylesheet" href="{prefix}assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a>'
             f'<header class="top"><div class="wrap"><div class="brand"><a href="{prefix}index.html">Signalpost Norway</a></div>'
             f'<div class="meta">Company profiles from official registers and identity-verified company sources</div></div></header>'
-            f'{body}{tags}</body></html>')
+            f'{body.replace("<main class=", "<main id=main class=", 1)}{tags}</body></html>')
 
 
 def _source_html(fact: dict[str, Any]) -> str:
@@ -353,6 +399,9 @@ def _link(url: Any) -> str:
 
 
 def _value_html(fact: dict[str, Any]) -> str:
+    if fact.get("missing") and fact.get("reason"):
+        return f'{esc(fact["text"])}<span class="reason">{esc(fact["reason"])}</span>'
+
     if fact.get("links"):
         # one clickable link per profile, with its confidence and proof
         return "<br>".join(
@@ -473,24 +522,56 @@ def links_section(envelope: dict[str, Any]) -> str:
     return html_out
 
 
+def _host_label(url: str | None) -> str:
+    host = urllib.parse.urlparse(url or "").netloc
+    return host[4:] if host.startswith("www.") else host or "source"
+
+
+def sentence_sources(item: dict[str, Any], evidence: dict[str, dict[str, Any]]) -> str:
+    """The source links of one summary sentence, one tap each (external source, then the evidence row)."""
+    links, seen = [], set()
+    for evidence_id in item.get("evidence_ids") or []:
+        record = evidence.get(evidence_id) or {}
+        source = safe_url(record.get("item_url")) or safe_url(record.get("source_url"))
+        if source and source not in seen:
+            seen.add(source)
+            links.append(f'<a href="{esc(source)}" target="_blank" rel="noopener noreferrer">{esc(_host_label(source))} ↗</a>')
+    ids = ", ".join(esc(eid) for eid in item.get("evidence_ids") or [])
+    return f' <span class="srcs">{" ".join(links[:3])} <span class="ids" title="Evidence ids (see Sources)">[{ids}]</span></span>'
+
+
+BRIEF_SECTIONS = (("headline", "Buyer fact"), ("why_it_matters", "Why it matters"), ("what_it_does", "What it does"), ("signal", "Signals"),
+                  ("changes", "What changed"), ("unknown", "What’s unknown"), ("financials", "Latest filed figures"),
+                  ("profile", "Registry profile"))
+
+
+def brief_html(envelope: dict[str, Any], evidence: dict[str, dict[str, Any]]) -> str:
+    sentences = (envelope.get("synthesis") or {}).get("sentences") or []
+    out = ""
+    for topic, heading in BRIEF_SECTIONS:
+        items = [item for item in sentences if item.get("topic") == topic]
+        if not items:
+            continue
+        if topic == "headline":
+            out += f'<div><h3>{esc(heading)}</h3><p class="lead">{esc(items[0]["text"])}{sentence_sources(items[0], evidence)}</p></div>'
+        elif topic == "why_it_matters":
+            text = re.sub(r"^Why it matters(?: \(FY\d{4} → FY\d{4}\))?: ", "", items[0]["text"])
+            out += f'<div><h3>{esc(heading)}</h3><p>{esc(text[0].upper() + text[1:])}{sentence_sources(items[0], evidence)}</p></div>'
+        elif topic == "signal":
+            cards = "".join(f'<li><b>{esc(item.get("label") or "")}</b>{esc(item["text"].split(": ", 1)[-1])}{sentence_sources(item, evidence)}</li>'
+                            for item in items)
+            out += f'<div><h3>{esc(heading)}</h3><ul class="signals">{cards}</ul></div>'
+        else:
+            lis = "".join(f'<li>{esc(item["text"])}{sentence_sources(item, evidence)}</li>' for item in items)
+            out += f'<div><h3>{esc(heading)}</h3><ul>{lis}</ul></div>'
+    return out or '<p class="empty">No sourced summary could be written for this company.</p>'
+
+
 def company_page(envelope: dict[str, Any], record: dict[str, Any], run: dict[str, Any]) -> str:
     org = envelope["organisation_number"]
     evidence = _evidence_map(envelope)
     synthesis = envelope.get("synthesis") or {}
-    topics = {"headline": "Key fact", "what_it_does": "What it is and does", "financials": "Latest financials", "changes": "What changed",
-              "why_it_matters": "Why the change matters", "unknown": "What is unknown"}
-    summary_html = ""
-    for topic, heading in topics.items():
-        items = [item for item in synthesis.get("sentences") or [] if item.get("topic") == topic]
-        if not items:
-            continue
-        summary_html += f'<div class="topic">{esc(heading)}</div>'
-        for item in items:
-            cites = ", ".join(f'<a href="#{esc(eid)}">{esc(eid)}</a>' for eid in item["evidence_ids"])
-            summary_html += f'<p>{esc(item["text"])} <span class="cite">[{cites}]</span></p>'
-    if not summary_html:
-        summary_html = '<p class="empty">No sourced summary could be written for this company.</p>'
-
+    summary_html = brief_html(envelope, evidence)
     fact_rows = "".join(
         f'<tr><td>{esc(fact["label"])}</td><td class="{"missing" if fact["missing"] else ""}">{_value_html(fact)}</td><td>{_source_html(fact)}</td></tr>'
         for fact in record["facts"])
@@ -539,29 +620,47 @@ def company_page(envelope: dict[str, Any], record: dict[str, Any], run: dict[str
     status = record["status"]
     chips = _chip({"active": "Active", "deleted": "Deleted", "adverse": "Bankrupt / liquidation", "unknown": "Status unknown"}[status],
                   {"active": "good", "deleted": "bad", "adverse": "bad"}.get(status, ""))
-    body = (f'<main class="wrap"><p class="meta"><a href="../index.html">← All companies</a> · '
-            f'<a href="../compare.html?orgs={esc(org)}">Compare with others</a></p>'
-            f'<h1>{esc(record["name"])}</h1><p class="meta">Org. no. {esc(org_display(org))} · {chips} · run {esc(run.get("run_id"))}, '
-            f'completed {esc(_day(run.get("completed_at")))}</p>'
-            f'<h2>Summary</h2><section class="summary" aria-label="Sourced summary">{summary_html}</section>'
-            f'<h2>Facts</h2><div class="scroll"><table class="facts"><thead><tr><th>Fact</th><th>Value</th><th>Source and date</th></tr></thead>'
+    body = (f'<div class="sticky"><div class="wrap"><span class="who">{esc(record["name"])}</span>'
+            f'<span class="org">Org. no. {esc(org_display(org))}</span>'
+            f'<nav aria-label="On this page"><a href="#summary">Summary</a><a href="#facts">Facts</a><a href="#evidence">Sources</a>'
+            f'<a href="../index.html">All companies</a></nav></div></div>'
+            f'<main class="wrap"><h1>{esc(record["name"])}</h1><p class="meta">Org. no. {esc(org_display(org))} · {chips} · run {esc(run.get("run_id"))}, '
+            f'completed {esc(_day(run.get("completed_at")))} · <a href="../compare.html?orgs={esc(org)}">Compare with others</a></p>'
+            f'<h2 id="summary">Summary · What changed · Unknowns</h2><section class="summary" aria-labelledby="summary">{summary_html}</section>'
+            f'<h2 id="facts">Facts</h2><div class="scroll"><table class="facts"><thead><tr><th>Fact</th><th>Value</th><th>Source and date</th></tr></thead>'
             f'<tbody>{fact_rows}</tbody></table></div>'
             f'<h2>Links and confidence</h2>{links_section(envelope)}'
             f'<h2>All facts</h2>{facts_table(envelope)}'
             f'<h2>Filed annual accounts</h2>{fin_html}'
             f'<h2>Dated news from its verified website</h2>{news_html}'
             f'<h2>Registered roles</h2>{roles_html}'
-            f'<h2>Evidence</h2><details><summary>{len(envelope.get("evidence") or [])} evidence records</summary>'
-            f'<div class="scroll"><table><thead><tr><th>Id</th><th>Source</th><th>Class</th><th>Retrieved</th><th>Span / hash</th></tr></thead>'
-            f'<tbody>{evidence_rows}</tbody></table></div></details></main>')
+            f'<h2 id="evidence">Sources ({len(envelope.get("evidence") or [])} evidence records)</h2>'
+            f'<div class="scroll"><table class="evidence"><thead><tr><th>Id</th><th>Source</th><th>Class</th><th>Retrieved</th><th>Span / hash</th></tr></thead>'
+            f'<tbody>{evidence_rows}</tbody></table></div></main>')
     return _page(f"{record['name']} — Signalpost Norway", body, depth=1,
-                 description=(synthesis.get("sentences") or [{}])[0].get("text", "")[:200])
+                 description=(synthesis.get("headline") or ((synthesis.get("sentences") or [{}])[0].get("text", "")))[:200])
+
+
+def _fold(text: str, variant: int) -> str:
+    text = str(text or "").casefold()
+    for letter, plain in (("æ", ("ae", "a")), ("ø", ("o", "oe")), ("å", ("a", "aa"))):
+        text = text.replace(letter, plain[variant])
+    text = "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^a-z0-9]", "", text)
+
+
+def search_key(name: str, org: str, *more: str | None) -> str:
+    """What the index search matches: the name in both æ/ø/å spellings, the org number and the industry/address,
+    each folded with no spaces or punctuation (the browser folds the query the same way)."""
+    parts = [_fold(name, 0), _fold(name, 1), org, *(_fold(item or "", 0) for item in more)]
+    return "|".join(dict.fromkeys(part for part in parts if part))
 
 
 def index_page(records: list[dict[str, Any]], run: dict[str, Any]) -> str:
     total = len(records)
     stats = [(total, "companies"), (sum(r["website"] for r in records), "verified websites"),
-             (sum(r["news"] for r in records), "with dated news"), (sum(bool(r["fy"]) for r in records), "with filed accounts")]
+             (sum(r["news"] for r in records), "with dated news"), (sum(r["jobs"] for r in records), "with jobs"),
+             (sum(bool(r["fy"]) for r in records), "with filed accounts")]
     stats_html = "".join(f'<div class="stat"><b>{value}</b>{esc(label)}</div>' for value, label in stats)
     rows = []
     for r in records:
@@ -574,24 +673,27 @@ def index_page(records: list[dict[str, Any]], run: dict[str, Any]) -> str:
             chips.append(_chip("Verified website", "good"))
         if r["news"]:
             chips.append(_chip("Dated news", "good"))
-        search = " ".join(part for part in (r["name"], r["industry"] or "", r["address"] or ""))
-        folded = "".join(c for c in unicodedata.normalize("NFD", search) if unicodedata.category(c) != "Mn").casefold()
+        if r["jobs"]:
+            chips.append(_chip("Jobs", "good"))
+        folded = search_key(r["name"], r["org"], r["industry"], r["address"])
         rows.append(
             f'<li class="row" data-org="{esc(r["org"])}" data-name="{esc(folded)}" data-label="{esc(label)}" data-status="{esc(r["status"])}" '
-            f'data-website="{int(r["website"])}" data-news="{int(r["news"])}">'
+            f'data-website="{int(r["website"])}" data-news="{int(r["news"])}" data-jobs="{int(r["jobs"])}">'
             f'<div><a class="name" href="companies/{esc(r["org"])}.html">{esc(label)}</a>'
             f'<div class="sub">{esc(org_display(r["org"]))}{" · " + esc(r["industry"]) if r["industry"] else ""}{" · " + esc(r["address"]) if r["address"] else ""}</div></div>'
             f'<label><input type="checkbox" aria-label="Compare {esc(label)}"> Compare</label>'
+            f'{"<p class=lead>" + esc(r["headline"]) + "</p>" if r.get("headline") else ""}'
             f'<div class="chips">{"".join(chips)}</div></li>')
     body = (f'<main class="wrap"><h1>Norwegian company profiles</h1>'
             f'<p class="meta">Run {esc(run.get("run_id"))} · completed {esc(run.get("completed_at"))} · every fact links to its source and date.</p>'
             f'<div class="stats">{stats_html}</div>'
-            f'<div class="controls" role="search"><input id="q" type="search" placeholder="Search by name or organisation number" '
+            f'<div class="controls" role="search"><input id="q" type="search" placeholder="Search by name or organisation number (spaces, æ/ø/å ignored)" '
             f'aria-label="Search by name or organisation number" autocomplete="off">'
             f'<select id="status" aria-label="Registry status"><option value="">Any status</option><option value="active">Active</option>'
             f'<option value="adverse">Bankrupt / liquidation</option><option value="deleted">Deleted</option><option value="unknown">Unknown</option></select>'
             f'<label class="chip"><input id="has-website" type="checkbox"> Verified website</label>'
-            f'<label class="chip"><input id="has-news" type="checkbox"> Dated news</label></div>'
+            f'<label class="chip"><input id="has-news" type="checkbox"> Dated news</label>'
+            f'<label class="chip"><input id="has-jobs" type="checkbox"> Jobs</label></div>'
             f'<p class="meta" id="count" aria-live="polite">{total} companies</p>'
             f'<ul class="list" id="companies">{"".join(rows)}</ul></main>'
             f'<div class="tray" role="region" aria-label="Compare selection"><span id="tray-names" class="meta">Pick 2–3 companies to compare</span>'
@@ -633,7 +735,7 @@ def build_site(envelopes: list[dict[str, Any]], out_dir: str | Path, run: dict[s
         records.append(record)
         (out / "companies" / f"{org}.html").write_text(company_page(envelope, record, run), encoding="utf-8")
         compare_data = {"org": org, "name": record["name"],
-                        "facts": [{key: fact.get(key) for key in ("key", "label", "text", "missing", "link", "src", "as_of", "retrieved", "ev")}
+                        "facts": [{key: fact.get(key) for key in ("key", "label", "text", "missing", "reason", "link", "src", "as_of", "retrieved", "ev")}
                                   for fact in record["facts"]]}
         (out / "data" / f"{org}.js").write_text(f"window.SP_LOAD&&SP_LOAD({_js_payload(org)},{_js_payload(compare_data)});\n", encoding="utf-8")
     ordered = sorted(records, key=lambda r: r["name"].casefold())
@@ -646,6 +748,7 @@ def build_site(envelopes: list[dict[str, Any]], out_dir: str | Path, run: dict[s
         "run_id": run.get("run_id"), "completed_at": run.get("completed_at"), "companies": len(records),
         "company_pages": len(records), "with_summary": sum(1 for e in envelopes if (e.get("synthesis") or {}).get("sentences")),
         "with_verified_website": sum(r["website"] for r in records), "with_dated_news": sum(r["news"] for r in records),
+        "with_jobs": sum(r["jobs"] for r in records),
         "entry": "index.html", "compare": "compare.html",
     }
     (out / "site-manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
